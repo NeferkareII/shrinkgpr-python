@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Python port of the R package **shrinkGPR** (https://github.com/NeferkareII/shrinkGPR, version 2.1.1). The package does variational inference for Gaussian process regression with hierarchical shrinkage priors, with the posterior approximated by normalizing flows trained in PyTorch.
 
-- **Reference commit: `9ff1d31`.** The Python code should reproduce the numerics of that commit. Read the R source at `https://raw.githubusercontent.com/NeferkareII/shrinkGPR/9ff1d31/R/<file>.R`.
+- **Reference commit: `011c9ca`.** The Python code should reproduce the numerics of that commit. Read the R source at `https://raw.githubusercontent.com/NeferkareII/shrinkGPR/9ff1d31/R/<file>.R`.
 ## Commands
 
 The project uses uv with Python 3.15 (`.python-version`). The source layout is `src/shrinkgpr`.
@@ -160,7 +160,6 @@ The rest of this file describes R reference behavior. R names such as `shrinkGPR
 
 ## Deliberate deviations from the R reference
 
-- **`robust_hyperu`, small-z branch for 1 < b < 2:** the constant term is `Γ(1-b)/Γ(a-b+1)`, which is negative here. R computes `exp(-lgamma(1-b) - lgamma(a-b+1))`, which is wrong by up to ~13% against mpmath.
 - **`robust_hyperu` with b == 0:** this uses Kummer's transformation `U(a,0,z) = z·U(a+1,2,z)`. `scipy.special.hyperu` is inaccurate at b = 0 for z < 1e-3, whereas gsl, used by R, is not.
 
 ## R → Python porting pitfalls
