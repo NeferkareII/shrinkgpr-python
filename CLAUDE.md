@@ -158,6 +158,11 @@ The rest of this file describes R reference behavior. R names such as `shrinkGPR
 
 **`gen_posterior_samples`** pushes `gen_batch(nsamp)` through the flows (`forward`). It returns `thetas` (columns `theta_<term>`), `sigma2`, `tau`, and with a mean also `betas` (`beta_<name>`) and `tau_mean`.
 
+## Deliberate deviations from the R reference
+
+- **`robust_hyperu`, small-z branch for 1 < b < 2:** the constant term is `Γ(1-b)/Γ(a-b+1)`, which is negative here. R computes `exp(-lgamma(1-b) - lgamma(a-b+1))`, which is wrong by up to ~13% against mpmath.
+- **`robust_hyperu` with b == 0:** this uses Kummer's transformation `U(a,0,z) = z·U(a+1,2,z)`. `scipy.special.hyperu` is inaccurate at b = 0 for z < 1e-3, whereas gsl, used by R, is not.
+
 ## R → Python porting pitfalls
 
 - **Negative indices:** R torch reads them from the end, like Python, so `zk[, -1]` is the last column.
