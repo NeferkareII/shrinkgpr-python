@@ -17,7 +17,14 @@ uv run pytest                                   # full test suite
 uv run pytest -m "not slow"                     # skip long-running checks
 uv run pytest tests/test_file.py::test_name     # single test
 uv run ruff check .                             # lint
+uv run pytest -m "not r"                        # skip the comparisons against R
+uv run python -m compare.numerics               # function-by-function comparison with R
+uv run python -m compare.benchmark              # training speed, Python vs R
 ```
+
+- **Comparison with R.** `compare/` checks the port against the reference R package. It is installed into the separate library `~/.venvs/shrinkgpr_rlib`; see `compare/README.md`.
+  - Every newly ported function should get a case in `compare/numerics.py` and a handler in `compare/r/numerics.R`.
+  - The `r`-marked tests skip themselves when R or the reference version of the package is missing.
 
 - **The venv lives outside OneDrive.** It is at `C:\Users\knaus\.venvs\shrinkgpr`, set through the user environment variable `UV_PROJECT_ENVIRONMENT`. Don't create a `.venv` inside the repository.
 - **torch comes from the PyTorch CUDA 13.0 index** (`pytorch-cu130` in `pyproject.toml`). That index has Python 3.15 wheels and supports the RTX 5080 (Blackwell). Everything else comes from PyPI.
@@ -165,6 +172,9 @@ The rest of this file describes R reference behavior. R names such as `shrinkGPR
 
 ## Deliberate deviations from the R reference
 
+- **Continued training keeps the best model from earlier `fit()` calls.** With `cont_model`, R resets the best model to the first epoch of the new run, even if that epoch is worse.
+- **`loss_stor_` accumulates across `fit()` calls and holds only the epochs that ran.** R's `loss_stor` covers one call and is padded with NA. Auto-stop still looks only at the current call's losses.
+- **Errors during `fit()`.** An error before any finite loss exists is re-raised. Later errors and `KeyboardInterrupt` warn and keep the model trained so far, as in R.
 - **`robust_hyperu` with b == 0:** this uses Kummer's transformation `U(a,0,z) = z·U(a+1,2,z)`. `scipy.special.hyperu` is inaccurate at b = 0 for z < 1e-3, whereas gsl, used by R, is not.
 
 ## R → Python porting pitfalls

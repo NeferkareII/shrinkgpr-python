@@ -41,8 +41,12 @@ explicit = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["slow: long-running checks (deselect with -m 'not slow')"]
+pythonpath = ["."]
+markers = [
+    "slow: long-running checks (deselect with -m 'not slow')",
+    "r: comparisons against the R package; skipped without R (deselect with -m 'not r')",
+]
 
 [tool.ruff]
 line-length = 100
-src = ["src", "tests"]
+src = ["src", "tests", "compare"]
