@@ -15,6 +15,22 @@ cpu <- torch_device("cpu")
 
 first <- function(x) if (is.list(x)) x[[1]] else x
 
+# A GPR_class whose gen_batch replays a list of base samples in order
+set_replay <- function(zs) {
+  replay <- new.env()
+  replay$i <- 0
+  assign(".replay", list(zs = zs, env = replay), envir = globalenv())
+  replay
+}
+GPR_replay <- nn_module(
+  inherit = shrinkGPR:::GPR_class,
+  gen_batch = function(n_latent) {
+    r <- get(".replay", envir = globalenv())
+    r$env$i <- r$env$i + 1
+    r$zs[[r$env$i]]
+  }
+)
+
 new_gpr <- function(inp, module_class = shrinkGPR:::GPR_class) {
   m <- module_class(D(inp$y), D(inp$x), D(inp$x_mean),
                     a = inp$a, c = inp$c, a_mean = inp$a_mean, c_mean = inp$c_mean,
@@ -87,28 +103,33 @@ handlers <- list(
     c(list(zk = out$zk, log_det_J = out$log_det_J, elbo = elbo), grads_of(m))
   },
 
+  pred = function(inp) {
+    replay <- set_replay(rep(list(D(inp$z)), 3))
+    m <- new_gpr(inp, GPR_replay)
+    load_state(m, inp$state, dtype)
+    x_new <- D(inp$x_new)
+    x_mean_new <- D(inp$x_mean_new)
+    moments <- m$calc_pred_moments(x_new, inp$nsamp, x_mean_new)
+    torch_manual_seed(inp$seed)
+    draws <- m$predict(x_new, inp$nsamp, x_mean_new)
+    dens <- m$eval_pred_dens(D(inp$y_eval), x_new[1:1, , drop = FALSE], inp$nsamp,
+                             if (is.null(x_mean_new)) NULL else x_mean_new[1:1, , drop = FALSE],
+                             log = TRUE)
+    list(means = moments$pred_mean, vars = moments$pred_var, predict = draws,
+         eval_pred_dens = dens)
+  },
+
   train = function(inp) {
     # Feed fixed base samples to R's own training loop: a GPR_class whose
     # gen_batch replays them, passed to shrinkGPR() as a continuation model
-    zs <- lapply(inp$zs, D)
-    replay <- new.env()
-    replay$i <- 0
-    assign(".replay", list(zs = zs, env = replay), envir = globalenv())
-    GPR_replay <- nn_module(
-      inherit = shrinkGPR:::GPR_class,
-      gen_batch = function(n_latent) {
-        r <- get(".replay", envir = globalenv())
-        r$env$i <- r$env$i + 1
-        r$zs[[r$env$i]]
-      }
-    )
+    replay <- set_replay(lapply(inp$zs, D))
     m <- new_gpr(inp, GPR_replay)
     load_state(m, inp$state, dtype)
     opt <- optim_adam(m$parameters, lr = 1e-3, weight_decay = 1e-3)
     cont <- structure(list(model = m, loss = Inf, last_model = m, optimizer = opt,
                            model_internals = list()), class = "shrinkGPR")
     df <- data.frame(y = as.numeric(as_array(D(inp$y))), as_array(D(inp$x)))
-    res <- shrinkGPR(y ~ ., data = df, n_epochs = length(zs), auto_stop = FALSE,
+    res <- shrinkGPR(y ~ ., data = df, n_epochs = length(inp$zs), auto_stop = FALSE,
                      display_progress = FALSE, cont_model = cont, device = cpu)
     c(list(loss_stor = res$loss_stor, n_replayed = replay$i), state_of(res$last_model))
   },
@@ -116,6 +137,7 @@ handlers <- list(
   end_to_end = function(inp) {
     # x_mean = [1, second covariate] on the Python side, i.e. formula_mean = ~ X2
     df <- data.frame(y = as.numeric(as_array(D(inp$y))), as_array(D(inp$x)))
+    df_new <- data.frame(y = as.numeric(as_array(D(inp$y_new))), as_array(D(inp$x_new)))
     torch_manual_seed(inp$seed)
     if (isTRUE(inp$with_mean)) {
       res <- shrinkGPR(y ~ ., data = df, formula_mean = ~ X2, n_epochs = inp$n_epochs,
@@ -124,7 +146,14 @@ handlers <- list(
       res <- shrinkGPR(y ~ ., data = df, n_epochs = inp$n_epochs, auto_stop = FALSE,
                        display_progress = FALSE, device = cpu)
     }
-    list(loss_stor = res$loss_stor, loss = res$loss)
+    torch_manual_seed(11)
+    moments <- calc_pred_moments(res, newdata = df_new, nsamp = 20)
+    torch_manual_seed(12)
+    draws <- predict(res, newdata = df_new, nsamp = 20)
+    torch_manual_seed(13)
+    lpds <- LPDS(res, df_new[1, ], nsamp = 20)
+    list(loss_stor = res$loss_stor, loss = res$loss, means = moments$means,
+         vars = moments$vars, predict = draws, lpds = lpds)
   }
 )
 

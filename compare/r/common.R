@@ -34,7 +34,9 @@ enc <- function(x) {
   }
   if (is.numeric(x)) {
     shp <- if (!is.null(dim(x))) dim(x) else if (length(x) == 1) integer(0) else length(x)
-    return(list(`__tensor__` = TRUE, shape = as.list(as.integer(shp)), data = I(as.numeric(x))))
+    # R arrays are column-major; reverse the dimensions for row-major data
+    v <- if (!is.null(dim(x))) as.numeric(aperm(x)) else as.numeric(x)
+    return(list(`__tensor__` = TRUE, shape = as.list(as.integer(shp)), data = I(v)))
   }
   if (is.list(x)) return(lapply(x, enc))
   x

@@ -86,6 +86,8 @@ samples = model.predict(x_new, nsamp=100)
   - `plot(nsamp=1000)`.
 
   `x_new=None` means the training data. For a model built with `from_formula`, `x_new` is a DataFrame.
+- **Models built from arrays with a mean** also take the keyword `x_mean_new`. It is required whenever `x_new` is given. DataFrame columns are matched by the names seen in training. With several covariates, a 1-D array counts as one row.
+- **`eval_pred_dens` and `lpds` take exactly one test row**, as in R. `eval_pred_dens` accepts several `y_eval` values.
 - **Later models** follow the same pattern: `ShrinkTPR` (a subclass of `ShrinkGPR`), `ShrinkMVGPR` and `ShrinkMVTPR`.
 
 The rest of this file describes R reference behavior. R names such as `shrinkGPR(...)`, `cont_model` or `LPDS` refer to the R source, not to the Python API.
@@ -174,6 +176,7 @@ The rest of this file describes R reference behavior. R names such as `shrinkGPR
 
 - **Continued training keeps the best model from earlier `fit()` calls.** With `cont_model`, R resets the best model to the first epoch of the new run, even if that epoch is worse.
 - **`loss_stor_` accumulates across `fit()` calls and holds only the epochs that ran.** R's `loss_stor` covers one call and is padded with NA. Auto-stop still looks only at the current call's losses.
+- **Prediction outputs always have full shapes:** `nsamp × N_new` and `nsamp × N_new × N_new`. R's `$squeeze()` drops dimensions when `nsamp = 1` or `N_new = 1`.
 - **Errors during `fit()`.** An error before any finite loss exists is re-raised. Later errors and `KeyboardInterrupt` warn and keep the model trained so far, as in R.
 - **`robust_hyperu` with b == 0:** this uses Kummer's transformation `U(a,0,z) = z·U(a+1,2,z)`. `scipy.special.hyperu` is inaccurate at b = 0 for z < 1e-3, whereas gsl, used by R, is not.
 

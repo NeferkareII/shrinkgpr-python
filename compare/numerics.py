@@ -179,6 +179,10 @@ def build_cases(dtype):
     x_gp = rng.normal(size=(N, p))
     y_gp = np.sin(2 * x_gp[:, 0]) + 0.1 * rng.normal(size=N)
     x_mean_gp = np.column_stack([np.ones(N), x_gp[:, 1]])
+    x_new_gp = rng.normal(size=(5, p))
+    x_mean_new_gp = np.column_stack([np.ones(5), x_new_gp[:, 1]])
+    y_eval = np.array([-0.5, 0.0, 1.2])
+    y_new_gp = np.sin(2 * x_new_gp[:, 0])
     model_specs = [
         ("sylvester", "kernel_se", False, {}),
         ("iaf", "kernel_matern_32", True, {"hidden_dim": 16}),
@@ -203,6 +207,24 @@ def build_cases(dtype):
         cases.append(Case(f"gpr {label}", "gpr",
                           {**inputs, "state": _state(module), "z": z_gp},
                           {"zk": zk, "log_det_J": log_det_J, "elbo": elbo, **_grads(module)},
+                          tol="r_scalar"))
+
+        # Prediction: same base samples; predict() then draws its noise from
+        # the shared libtorch generator after the same seed
+        z_pred = module.gen_batch(6).detach()
+        module.gen_batch = lambda n, z_pred=z_pred: z_pred
+        xm_new = T(x_mean_new_gp) if with_mean else None
+        means, covs = module.calc_pred_moments(T(x_new_gp), 6, xm_new)
+        torch.manual_seed(31)
+        draws = module.predict(T(x_new_gp), 6, xm_new)
+        dens = module.eval_pred_dens(T(y_eval), T(x_new_gp[:1]), 6,
+                                     None if xm_new is None else xm_new[:1], log=True)
+        cases.append(Case(f"pred {label}", "pred",
+                          {**inputs, "state": _state(module), "z": z_pred, "x_new": x_new_gp,
+                           "x_mean_new": x_mean_new_gp if with_mean else None,
+                           "y_eval": y_eval, "seed": 31, "nsamp": 6},
+                          {"means": means, "vars": covs, "predict": draws,
+                           "eval_pred_dens": dens},
                           tol="r_scalar"))
 
         if i < 2:
@@ -235,11 +257,21 @@ def build_cases(dtype):
             torch.manual_seed(7)
             model = ShrinkGPR(y_gp, x_gp, x_mean_gp if with_mean else None, device="cpu")
             model.fit(n_epochs=n_epochs, auto_stop=False, display_progress=False)
+            xm_new = x_mean_new_gp if with_mean else None
+            xm_row = x_mean_new_gp[:1] if with_mean else None
+            torch.manual_seed(11)
+            moments = model.calc_pred_moments(x_new_gp, nsamp=20, x_mean_new=xm_new)
+            torch.manual_seed(12)
+            draws = model.predict(x_new_gp, nsamp=20, x_mean_new=xm_new)
+            torch.manual_seed(13)
+            lpds = model.lpds(y_new_gp[0], x_new_gp[:1], nsamp=20, x_mean_new=xm_row)
             cases.append(Case(f"end to end shrinkGPR() {'mean' if with_mean else 'no mean'}",
                               "end_to_end",
                               {"y": y_gp, "x": x_gp, "seed": 7, "n_epochs": n_epochs,
-                               "with_mean": with_mean},
-                              {"loss_stor": model.loss_stor_, "loss": np.array(model.loss_)},
+                               "with_mean": with_mean, "x_new": x_new_gp, "y_new": y_new_gp},
+                              {"loss_stor": model.loss_stor_, "loss": np.array(model.loss_),
+                               "means": moments["means"], "vars": moments["vars"],
+                               "predict": draws, "lpds": np.array(lpds)},
                               tol="train"))
     return cases
 

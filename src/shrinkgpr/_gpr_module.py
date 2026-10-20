@@ -1,5 +1,7 @@
 """Internal model for Gaussian process regression (port of R/GPR_class.R)."""
 
+import math
+
 import torch
 from torch import nn
 
@@ -171,3 +173,59 @@ class GPRModule(nn.Module):
         if torch.isnan(elbo):
             raise RuntimeError("ELBO is NaN")
         return elbo
+
+    # Prediction
+
+    @torch.no_grad()
+    def calc_pred_moments(self, x_new, nsamp, x_mean_new=None):
+        """Predictive means (nsamp x N_new) and covariances (nsamp x N_new x N_new).
+
+        Each of the ``nsamp`` posterior draws of the kernel parameters gives one
+        Gaussian predictive distribution.
+        """
+        zk_pos, _ = self(self.gen_batch(nsamp))
+        params = self.unpack(zk_pos)
+        thetas, tau, sigma2, betas = (params["thetas"], params["tau"], params["sigma2"],
+                                      params["betas"])
+
+        # L L' = K + sigma2 I, alpha = (K + sigma2 I)^{-1} y
+        K = self.kernel_func(thetas, tau, self.x)
+        L = robust_chol(self.noisy_cov(K, sigma2))
+        if self.mean_zero:
+            y = self.y.expand(nsamp, self.N, 1)
+        else:
+            y = (self.y - self.x_mean @ betas.t()).t().unsqueeze(-1)
+        alpha = torch.cholesky_solve(y, L)
+
+        K_star_star = self.kernel_func(thetas, tau, x_new)
+        K_star_t = self.kernel_func(thetas, tau, self.x, x_new)
+
+        pred_mean = (K_star_t @ alpha).squeeze(-1)
+        if not self.mean_zero:
+            pred_mean = pred_mean + (x_mean_new @ betas.t()).t()
+
+        eye_new = torch.eye(x_new.shape[0], device=x_new.device, dtype=x_new.dtype)
+        v = torch.linalg.solve_triangular(L, K_star_t.transpose(1, 2), upper=False)
+        pred_var = K_star_star - v.transpose(1, 2) @ v + eye_new * sigma2.view(-1, 1, 1)
+        return pred_mean, pred_var
+
+    @torch.no_grad()
+    def predict(self, x_new, nsamp, x_mean_new=None):
+        """Draws from the posterior predictive distribution (nsamp x N_new)."""
+        pred_mean, pred_var = self.calc_pred_moments(x_new, nsamp, x_mean_new)
+        chol = robust_chol(pred_var)
+        eps = torch.randn(nsamp, x_new.shape[0], 1, device=x_new.device, dtype=x_new.dtype)
+        return pred_mean + (chol @ eps).squeeze(-1)
+
+    @torch.no_grad()
+    def eval_pred_dens(self, y_new, x_new, nsamp, x_mean_new=None, log=False):
+        """Posterior predictive density at a single test point, for each value in ``y_new``.
+
+        The density is the average of the ``nsamp`` Gaussian predictive
+        densities, computed with log-sum-exp.
+        """
+        pred_mean, pred_var = self.calc_pred_moments(x_new, nsamp, x_mean_new)
+        dist = torch.distributions.Normal(pred_mean[:, 0], torch.sqrt(pred_var[:, 0, 0]))
+        log_dens = dist.log_prob(y_new.unsqueeze(1))  # len(y_new) x nsamp
+        res = torch.logsumexp(log_dens, dim=1) - math.log(nsamp)
+        return res if log else torch.exp(res)
