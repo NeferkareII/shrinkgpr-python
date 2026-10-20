@@ -91,6 +91,10 @@ The rest of this file describes R reference behavior. R names such as `shrinkGPR
 - `forward(z)` runs them through the flows, adding up each layer's `log_diag_j`, and then applies the positivity transform.
 - `elbo(zk, log_det_J)` returns the mean log-likelihood plus the mean log-prior plus the mean log|J|.
 
+**Python port (`_gpr_module.py`).** `GPRModule` applies softplus through a boolean `positive` mask, which is true everywhere except on the β columns. Subclasses extend it like this:
+- set `n_extra` to append trailing positive parameters (ν for TPR);
+- override the hooks `unpack`, `log_likelihood` and `log_prior`.
+
 **Latent vector layout.** Columns are 0-based here; R uses 1-based indexing.
 - Without a mean: `[θ_1..θ_d, σ², τ]`, so `d_latent = d + 2`.
 - With a mean: `[θ_1..θ_d, σ², τ, β_1..β_p, τ_mean]`, so `d_latent = d + p + 3`.
