@@ -130,6 +130,7 @@ The rest of this file describes R reference behavior. R names such as `shrinkGPR
   - R adds 1 to the `searchsorted` result and clamps to `[1, K]` because R torch's `gather` is 1-based.
   - In Python, clamp to `[0, K-1]` and gather at `idx` and `idx + 1`.
 - Random flow permutations use R's `sample.int` in the reference. In Python, draw them from torch's RNG.
+- In Python the flows are the classes `Sylvester`, `IAF` and `NSFCL` in `shrinkgpr.flows`. The lowercase aliases `sylvester`, `iaf` and `nsf_cl` keep the R names for `flow_func`. `IAF(perm=...)` takes a 0-based permutation of `range(d)`.
 
 **Training loop (R `shrinkGPR`, Python `ShrinkGPR.fit`).**
 - Optimizer: Adam with `lr=1e-3` and `weight_decay=1e-3`, overridable through `optim_control`.
