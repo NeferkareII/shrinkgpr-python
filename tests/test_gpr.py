@@ -152,7 +152,7 @@ def test_fit_is_reproducible_with_torch_seed(data):
 
 
 def test_auto_stop(data, monkeypatch):
-    monkeypatch.setattr("shrinkgpr.gpr.lightweight_ols", lambda y, x: 0.5)
+    monkeypatch.setattr("shrinkgpr._base.lightweight_ols", lambda y, x: 0.5)
     model = fitted(*data, n_epochs=250)
     assert model.stop_reason_ == "auto_stop" and model.loss_stor_.shape == (100,)
     torch.manual_seed(0)

@@ -9,8 +9,10 @@ Usage: uv run python -m compare.numerics [--dtype float64|float32|both]
 """
 
 import argparse
+import importlib
 import sys
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -69,7 +71,19 @@ def _grads(module, prefix="grad."):
     return {prefix + k: p.grad for k, p in module.named_parameters()}
 
 
-def build_cases(dtype):
+def plugin_names():
+    return [p.stem.removeprefix("cases_")
+            for p in sorted(Path(__file__).parent.glob("cases_*.py"))]
+
+
+def build_cases(dtype, plugins=None):
+    """All cases, or with ``plugins`` (e.g. ``["tpr"]``) only those of compare/cases_<name>.py."""
+    if plugins is not None:
+        cases = []
+        for name in plugins:
+            cases.extend(importlib.import_module(f"{__package__}.cases_{name}").build_cases(dtype))
+        return cases
+
     dt = torch.float64 if dtype == "float64" else torch.float32
     rng = np.random.default_rng(2026)
 
@@ -273,7 +287,11 @@ def build_cases(dtype):
                                "means": moments["means"], "vars": moments["vars"],
                                "predict": draws, "lpds": np.array(lpds)},
                               tol="train"))
-    return cases
+
+    # Cases of further models live in compare/cases_<model>.py, each with a
+    # build_cases(dtype) returning a list of Case; their R handlers live in
+    # compare/r/handlers_<model>.R
+    return cases + build_cases(dtype, plugin_names())
 
 
 def _as_numpy(v):
@@ -323,8 +341,8 @@ def compare(cases, r_results, dtype):
     return rows
 
 
-def run_comparison(dtype):
-    cases = build_cases(dtype)
+def run_comparison(dtype, plugins=None):
+    cases = build_cases(dtype, plugins)
     payload = {"dtype": dtype,
                "cases": [{"name": c.name, "fn": c.fn, "inputs": c.inputs} for c in cases]}
     return compare(cases, run_r("numerics.R", payload), dtype)
@@ -358,6 +376,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--dtype", choices=["float64", "float32", "both"], default="both")
     parser.add_argument("--verbose", action="store_true", help="show every output")
+    parser.add_argument("--plugin", action="append", choices=plugin_names(),
+                        help="only run the cases of compare/cases_<PLUGIN>.py (repeatable)")
     args = parser.parse_args(argv)
 
     sha = r_package_sha()
@@ -367,7 +387,7 @@ def main(argv=None):
 
     failed = False
     for dtype in (["float64", "float32"] if args.dtype == "both" else [args.dtype]):
-        rows = run_comparison(dtype)
+        rows = run_comparison(dtype, args.plugin)
         print(summarize(rows, dtype, args.verbose))
         failed |= not all(r.ok for r in rows)
     return 1 if failed else 0

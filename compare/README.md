@@ -26,6 +26,11 @@ uv run python -m compare.numerics --dtype float32 --verbose
 uv run pytest -m r                                # the same check as a test
 ```
 
+The cases of models beyond `ShrinkGPR` live in plugins:
+- `compare/cases_<model>.py` defines `build_cases(dtype)`, which returns a list of `numerics.Case`.
+- `compare/r/handlers_<model>.R` adds entries to the R `handlers` list. It can use the helpers in `common.R` and `numerics.R` (`D`, `S`, `new_gpr`, `GPR_replay`, `set_replay`, `load_state`, `grads_of`, …).
+- `--plugin <model>` runs only that plugin's cases.
+
 How it works:
 - `numerics.py` evaluates each function in Python.
 - It sends the same inputs to `r/numerics.R` as JSON. Flows and models also get the same parameter values, copied by name.

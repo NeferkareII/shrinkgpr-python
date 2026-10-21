@@ -157,6 +157,13 @@ handlers <- list(
   }
 )
 
+# Handlers of further models: compare/r/handlers_<model>.R add entries to `handlers`
+r_dir <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE))))
+for (f in list.files(r_dir, pattern = "^handlers_.*\\.R$", full.names = TRUE)) {
+  tryCatch(source(f), error = function(e) message("Could not load ", basename(f), ": ",
+                                                  conditionMessage(e)))
+}
+
 results <- lapply(input$cases, function(case) {
   out <- tryCatch(handlers[[case$fn]](case$inputs),
                   error = function(e) list(error = conditionMessage(e)))
