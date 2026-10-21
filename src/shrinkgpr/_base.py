@@ -47,6 +47,11 @@ class ShrinkBase:
     ``x``.
     """
 
+    # Adam defaults of fit() and the max. gradient norm to clip to (None: no
+    # clipping); the multivariate models use lr=1e-4 and clip to 0.5, as in R
+    _adam_defaults = ADAM_DEFAULTS
+    _max_grad_norm = None
+
     def _setup(self, *, kernel_func, n_layers, flow_func, flow_args, device):
         """Check and store the arguments shared by all models."""
         check_positive_int(n_layers=n_layers)
@@ -90,7 +95,8 @@ class ShrinkBase:
             Show a progress bar and timing information.
         optim_control : dict, optional
             Arguments for ``torch.optim.Adam``; defaults ``lr=1e-3``,
-            ``weight_decay=1e-3``. Only used on the first call.
+            ``weight_decay=1e-3`` (``lr=1e-4`` for the multivariate models).
+            Only used on the first call.
 
         Returns
         -------
@@ -108,7 +114,7 @@ class ShrinkBase:
             optimizer = self.optimizer_
             best_loss, best_state = self.loss_, self._best_state
         else:
-            optim_args = merge_args(ADAM_DEFAULTS, optim_control, "optim_control")
+            optim_args = merge_args(self._adam_defaults, optim_control, "optim_control")
             optimizer = torch.optim.Adam(model.parameters(), **optim_args)
             best_loss, best_state = np.inf, None
 
@@ -129,6 +135,8 @@ class ShrinkBase:
 
                 optimizer.zero_grad()
                 loss.backward()
+                if self._max_grad_norm is not None:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), self._max_grad_norm)
                 optimizer.step()
 
                 # As in R, the best model is stored after the step that followed its loss
