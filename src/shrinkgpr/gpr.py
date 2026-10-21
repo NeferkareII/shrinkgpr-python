@@ -20,6 +20,15 @@ from .flows import sylvester
 from .kernels import kernel_se
 
 
+def _response_name(y):
+    """Name of a univariate response: its pandas label, else ``y``."""
+    if isinstance(y, pd.Series) and y.name is not None:
+        return str(y.name)
+    if isinstance(y, pd.DataFrame) and y.shape[1] == 1:
+        return str(y.columns[0])
+    return "y"
+
+
 class ShrinkGPR(ShrinkBase):
     """Gaussian process regression with hierarchical shrinkage priors.
 
@@ -94,6 +103,18 @@ class ShrinkGPR(ShrinkBase):
 
         self.a, self.c, self.a_mean, self.c_mean = a, c, a_mean, c_mean
         self.sigma2_rate = sigma2_rate
+        self.y_name_ = _response_name(y)
+
+        # Covariates by name, for gen_marginal_samples; a column of x_mean with
+        # the name of a column of x is the same covariate if the values agree
+        frame = pd.DataFrame(x_np, columns=self.x_names_)
+        self._ambiguous = []
+        for j, name in enumerate(self.x_mean_names_ or []):
+            if name not in frame:
+                frame[name] = x_mean_np[:, j]
+            elif not np.array_equal(frame[name].to_numpy(), x_mean_np[:, j]):
+                self._ambiguous.append(name)
+        self._train_frame = frame
 
         def tensor(arr):
             return None if arr is None else torch.tensor(arr, dtype=torch.float32)
@@ -278,6 +299,26 @@ class ShrinkGPR(ShrinkBase):
         """
         # As in R, the raw flow output, without the zero-guards of training
         return self._posterior_dict(self._posterior_draws(nsamp).cpu().numpy())
+
+    # Hooks of gen_marginal_samples
+
+    def _marginal_frame(self):
+        if self._formula is not None:
+            variables = self._formula.variables
+            return self._formula.data[variables], variables
+        if self._ambiguous:
+            raise ValueError(f"'x' and 'x_mean' both have columns {self._ambiguous} with "
+                             "different values; rename them to sweep covariates")
+        return self._train_frame, list(self._train_frame.columns)
+
+    def _marginal_means(self, new):
+        if self._formula is not None:
+            return self.calc_pred_moments(new, 1)["means"][0]
+        x_mean_new = None if self.x_mean_names_ is None else new[self.x_mean_names_]
+        return self.calc_pred_moments(new[self.x_names_], 1, x_mean_new=x_mean_new)["means"][0]
+
+    def _response_names(self):
+        return [self.y_name_]
 
     def _posterior_dict(self, zk):
         p = len(self.x_names_)

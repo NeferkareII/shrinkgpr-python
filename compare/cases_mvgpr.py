@@ -5,6 +5,7 @@ model class (``MVGPR`` or ``MVTPR``) as an input.
 """
 
 import numpy as np
+import pandas as pd
 import torch
 
 from shrinkgpr._mvgpr_module import MVGPRModule, ldnorm_multi, make_corr_chol
@@ -144,6 +145,11 @@ def build_model_cases(dtype, model, module_cls, user_cls, extra=None, seed=0,
             expected["predict"] = fit.predict(x_new, nsamp=20)
         torch.manual_seed(13)
         expected["lpds"] = np.array(fit.lpds(y_new[0], x_new[:1], nsamp=20))
+        # Marginal samples with fixed covariates (R names the covariates X1, X2)
+        torch.manual_seed(15)
+        marg = fit.gen_marginal_samples("x1", nsamp=4, fixed_x=pd.DataFrame(
+            x_new[:1], columns=["x1", "x2"]), n_eval_points=6, display_progress=False)
+        expected["marg"], expected["marg.grid"] = marg.mean_pred, marg.grid
         cases.append(Case(f"{tag} end to end shrink{model}()", "mv_end_to_end",
                           {"model": model, "y": y, "x": x, **extra, "seed": 7,
                            "n_epochs": n_epochs, "x_new": x_new, "y_new": y_new,

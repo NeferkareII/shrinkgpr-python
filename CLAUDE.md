@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Python port of the R package **shrinkGPR** (https://github.com/NeferkareII/shrinkGPR, version 2.1.1). The package does variational inference for Gaussian process regression with hierarchical shrinkage priors, with the posterior approximated by normalizing flows trained in PyTorch.
 
-- **Reference commit: `2580f13`.** The Python code should reproduce the numerics of that commit. Read the R source at `https://raw.githubusercontent.com/NeferkareII/shrinkGPR/2580f13/R/<file>.R`.
+- **Reference commit: `bb488f5`.** The Python code should reproduce the numerics of that commit. Read the R source at `https://raw.githubusercontent.com/NeferkareII/shrinkGPR/bb488f5/R/<file>.R`.
   - When the reference changes, update `REFERENCE_SHA` in `compare/_rbridge.py` and the install command in `compare/README.md`, and reinstall the R package into `~/.venvs/shrinkgpr_rlib`.
   - Also check `compare/r/handlers_*.R` for hand copies of R internals, such as `mv_elbo_parts`.
 ## Commands
@@ -41,6 +41,8 @@ Ported for `ShrinkGPR`, `ShrinkTPR`, `ShrinkMVGPR` and `ShrinkMVTPR`:
 - training with `.fit()`;
 - prediction methods: `predict`, `calc_pred_moments`, `eval_pred_dens`, `lpds`;
 - checking: `loss_stor_`, `gen_posterior_samples`, and `plot`, which draws boxplots of θ;
+- marginal effects: `gen_marginal_samples` and the 1D/2D plots of its result;
+- `save` and `load`;
 - `sim_gpr` and `sim_mvgpr` (the ports of `simGPR` and `simMVGPR`), to simulate data for checks.
 
 The fit depends on these R files:
@@ -57,13 +59,9 @@ The further models:
 - `ShrinkTPR(ShrinkGPR)` in `tpr.py` / `_tpr_module.py`;
 - `ShrinkMVGPR` in `mvgpr.py` / `_mvgpr_module.py`, and `ShrinkMVTPR(ShrinkMVGPR)` in `mvtpr.py` / `_mvtpr_module.py`. R has no linear mean for these, so there is no `x_mean`.
 
-Shared code lives in `ShrinkBase` (`_base.py`: `fit`, `plot`, formula and posterior helpers) and `_formula.py` (`FormulaDesign`). The R comparison cases of the further models are plugins (`compare/cases_<model>.py`, `compare/r/handlers_<model>.R`). `tests/test_models.py` checks the behaviour shared by all four models.
+Shared code lives in `ShrinkBase` (`_base.py`: `fit`, `plot`, `gen_marginal_samples`, `save`, formula and posterior helpers; the module-level `load`), `_formula.py` (`FormulaDesign`) and `_marginal.py` (`MarginalSamples`). The R comparison cases of the further models are plugins (`compare/cases_<model>.py`, `compare/r/handlers_<model>.R`). `tests/test_models.py` checks the behaviour shared by all four models; `tests/test_marginal.py` and `tests/test_save_load.py` cover marginal samples and saving.
 
-Deferred until later:
-- `gen_marginal_samples` and its plots;
-- save/load.
-
-Design the GPR model class so TPR can later subclass it, as `TPR_class` inherits from `GPR_class` in R.
+All of the R package is ported.
 
 ## Python API conventions
 
@@ -96,7 +94,9 @@ samples = model.predict(x_new, nsamp=100)
   - `eval_pred_dens(y_eval, x_new, nsamp=100, log=False)`;
   - `lpds(y_new, x_new, nsamp=100)`;
   - `gen_posterior_samples(nsamp=1000)`, which returns a dict: `thetas` and `betas` as DataFrames, the scalar parameters as arrays of shape `(nsamp,)`, and `Omega` as `(nsamp, M, M)`;
-  - `plot(nsamp=1000, ax=None, **kwargs)`, which draws with matplotlib and returns the `Axes`.
+  - `plot(nsamp=1000, ax=None, **kwargs)`, which draws with matplotlib and returns the `Axes`;
+  - `gen_marginal_samples(to_eval, nsamp=200, fixed_x=None, n_eval_points=None, eval_range=None, display_progress=True)`, which returns a `MarginalSamples` (see below);
+  - `save(file)`, with the module-level `shrinkgpr.load(file, device=None)`.
 
   `x_new=None` means the training data. For a model built with `from_formula`, `x_new` is a DataFrame holding the variables of both formulas, and `x_mean_new` is not used.
 - **Models built from arrays with a mean** also take the keyword `x_mean_new`. It is required whenever `x_new` is given. DataFrame columns are matched by the names seen in training. With several covariates, a 1-D array counts as one row.
@@ -189,6 +189,14 @@ The rest of this file describes R reference behavior. R names such as `shrinkGPR
 - MVGPR and MVTPR: `thetas`, `tau`, `sigma2`, `tau_Om` and `Omega` (built from the diagonal-biased factor `L_Om`); MVTPR adds `nu`. θ, τ (tol 1e-4) and σ² (tol 1e-6) are zero-guarded.
 - `plot` draws boxplots of `thetas`, with vertical labels as R's `las = 2`.
 
+**`gen_marginal_samples`** sweeps one or two covariates over a grid, `n_eval_points` points (default 100 for one covariate, 30 for two) over `eval_range` (default: the training range).
+- For each of the `nsamp` draws, the other covariates come from `fixed_x` (its first row) or from a random training row, and the predictive mean of one posterior draw (`calc_pred_moments(..., 1)`) is evaluated on the grid.
+- `to_eval` names raw variables: the columns of `x` and `x_mean` for array models, the data variables of the formulas for formula models. They must be numeric. Covariance and mean columns with the same name are one covariate; if their values differ, the model refuses.
+- The result `MarginalSamples(mean_pred, grid, to_eval, response)` has `mean_pred` of shape `nsamp × n` (1D) or `nsamp × n × n` (2D, `[i, j, k]` at `(grid1[j], grid2[k])`), with a trailing `M` axis for MV models. `grid` is an array, or a pair for 2D.
+- `MarginalSamples.plot()` dispatches to `plot_1d` (nested quantile bands, `probs` in pairs, and the median line) or `plot_2d` (a 3D surface of the median), one panel per response.
+
+**`save` / `load`.** `save` pickles the whole model object (fitted state, optimizer, formula specs) with `torch.save`. `load` maps to the CPU, then moves to `device`, which defaults to the saved device (falling back to the CPU with a warning when CUDA is missing). `load` only accepts files written by `save` and must only be used on trusted files.
+
 ## Deliberate deviations from the R reference
 
 - **Continued training keeps the best model from earlier `fit()` calls.** With `cont_model`, R resets the best model to the first epoch of the new run, even if that epoch is worse.
@@ -198,6 +206,11 @@ The rest of this file describes R reference behavior. R names such as `shrinkGPR
 - **Factor columns are named by formulaic,** e.g. `theta_f[a]` where R writes `theta_fa`. Both name θ by design-matrix columns (R via `model_internals$x_names` since `2580f13`), so only the format differs, and the comparison checks values only.
 - **`gen_posterior_samples` returns arrays of shape `(nsamp,)`** for scalar parameters, and DataFrames for `thetas` and `betas`, where R returns `nsamp × 1` matrices.
 - **Random draws come from torch's RNG.** This covers TPR's chi-squared draws in `predict` (R uses `rgamma`), MVTPR's `predict` (R uses `mniw::rMT`) and everything in `sim_gpr` and `sim_mvgpr`. The comparison feeds R the TPR draws; MVTPR draws match R only in distribution.
+- **Marginal samples.**
+  - The 2D plot is a matplotlib 3D surface, where R uses plotly.
+  - `plot_2d(response=None)` draws one surface per response in one figure. R (since `bb488f5`) draws one response per call, chosen with its 1-based `response`; pass a 0-based index or a name to `plot_2d` to do the same.
+  - The random training rows come from torch's RNG; with `fixed_x` the results match R.
+- **Saved files are pickles, not R's zip format,** and the two can't read each other's files.
 - **MVTPR training keeps the partial model on errors.** R's `shrinkMVTPR` has its `tryCatch` commented out.
 - **Stricter MV input checks:** `a_Om`, `c_Om`, `nu_alpha` and `nu_beta` must be positive, and `y` needs at least 2 columns (R gives NaN with one).
 - **R behaviour worth knowing, ported as is.**
@@ -234,4 +247,4 @@ They check these outputs (Python method names):
 - `eval_pred_dens`: one value per evaluation point;
 - `gen_posterior_samples`: the names above.
 
-They also check that training can continue. In Python that means calling `.fit()` again; save/load is deferred.
+They also check that training can continue. In Python that means calling `.fit()` again, also after `save` and `load`.

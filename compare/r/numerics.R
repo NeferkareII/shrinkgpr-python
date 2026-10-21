@@ -183,8 +183,16 @@ handlers <- list(
     torch_manual_seed(14)
     post <- flat_posterior(gen_posterior_samples(res, nsamp = 20))
     names(post) <- paste0("post.", names(post))
+    torch_manual_seed(15)
+    marg1 <- gen_marginal_samples(res, "x1", nsamp = 5, fixed_x = df_new[1, ],
+                                  n_eval_points = 7, display_progress = FALSE)
+    torch_manual_seed(16)
+    marg2 <- gen_marginal_samples(res, c("x1", "x2"), nsamp = 3, fixed_x = df_new[1, ],
+                                  n_eval_points = 4, display_progress = FALSE)
     c(list(loss_stor = res$loss_stor, means = moments$means, vars = moments$vars,
-           predict = draws, lpds = lpds), post)
+           predict = draws, lpds = lpds), post,
+      list(marg1 = marg1$mean_pred, marg1.grid = marg1$grid, marg2 = marg2$mean_pred,
+           marg2.grid1 = marg2$grid$grid1, marg2.grid2 = marg2$grid$grid2))
   },
 
   train = function(inp) {

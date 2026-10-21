@@ -356,13 +356,25 @@ def build_cases(dtype, plugins=None):
         # Posterior values only: R names the factor columns fa, formulaic f[a]
         torch.manual_seed(14)
         post = model.gen_posterior_samples(20)
+        # Marginal samples with fixed covariates: one posterior draw per sample
+        # from the shared generator (random training rows come from R's RNG)
+        fixed = df_e_new.iloc[[0]]
+        torch.manual_seed(15)
+        marg1 = model.gen_marginal_samples("x1", nsamp=5, fixed_x=fixed, n_eval_points=7,
+                                           display_progress=False)
+        torch.manual_seed(16)
+        marg2 = model.gen_marginal_samples(["x1", "x2"], nsamp=3, fixed_x=fixed,
+                                           n_eval_points=4, display_progress=False)
         cases.append(Case("end to end shrinkGPR() formula with factor", "formula_end_to_end",
                           {"data": _columns_of(df_e), "data_new": _columns_of(df_e_new),
                            "formula": "y ~ x1 + f", "formula_mean": "~ x2", "seed": 8,
                            "n_epochs": 30},
                           {"loss_stor": model.loss_stor_, "means": moments["means"],
                            "vars": moments["vars"], "predict": draws, "lpds": np.array(lpds),
-                           **{f"post.{k}": np.asarray(v) for k, v in post.items()}},
+                           **{f"post.{k}": np.asarray(v) for k, v in post.items()},
+                           "marg1": marg1.mean_pred, "marg1.grid": marg1.grid,
+                           "marg2": marg2.mean_pred, "marg2.grid1": marg2.grid[0],
+                           "marg2.grid2": marg2.grid[1]},
                           tol="train"))
 
     # Cases of further models live in compare/cases_<model>.py, each with a

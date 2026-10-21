@@ -7,7 +7,7 @@ These scripts check the Python port against the R package shrinkGPR, function by
 The comparison needs R with the packages `torch` (with its backend installed), `gsl`, `mniw`, `progress`, `rlang` and `jsonlite`. It also needs shrinkGPR at the reference commit (`REFERENCE_SHA` in `_rbridge.py`), installed into a separate library so your normal R library stays untouched:
 
 ```r
-remotes::install_github("NeferkareII/shrinkGPR@2580f13",
+remotes::install_github("NeferkareII/shrinkGPR@bb488f5",
                         lib = "C:/Users/knaus/.venvs/shrinkgpr_rlib",
                         dependencies = FALSE, upgrade = "never", force = TRUE)
 ```

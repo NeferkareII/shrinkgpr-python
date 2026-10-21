@@ -197,5 +197,10 @@ handlers$mv_end_to_end <- function(inp) {
   }
   torch_manual_seed(13)
   out$lpds <- LPDS(res, df_new[1, ], nsamp = 20)
+  torch_manual_seed(15)
+  marg <- gen_marginal_samples(res, "X1", nsamp = 4, fixed_x = df_new[1, ], n_eval_points = 6,
+                               display_progress = FALSE)
+  out$marg <- marg$mean_pred
+  out$marg.grid <- marg$grid
   out
 }

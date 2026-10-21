@@ -1,5 +1,7 @@
 """Gaussian process regression with hierarchical shrinkage priors."""
 
+from ._base import load
+from ._marginal import MarginalSamples
 from .flows import IAF, NSFCL, Sylvester, iaf, nsf_cl, sylvester
 from .gpr import ShrinkGPR
 from .kernels import kernel_matern_12, kernel_matern_32, kernel_matern_52, kernel_se
@@ -14,6 +16,7 @@ __version__ = "0.1.0.dev0"
 __all__ = [
     "IAF",
     "NSFCL",
+    "MarginalSamples",
     "ShrinkGPR",
     "ShrinkMVGPR",
     "ShrinkMVTPR",
@@ -24,6 +27,7 @@ __all__ = [
     "kernel_matern_32",
     "kernel_matern_52",
     "kernel_se",
+    "load",
     "nsf_cl",
     "sim_gpr",
     "sim_mvgpr",

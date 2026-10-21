@@ -100,6 +100,8 @@ class ShrinkMVGPR(ShrinkBase):
         if x_np.shape[0] != y_np.shape[0]:
             raise ValueError("'y' and 'x' must have the same number of rows")
         self._y_np, self._x_np = y_np, x_np
+        # Covariates by name, for gen_marginal_samples
+        self._train_frame = pd.DataFrame(x_np, columns=self.x_names_)
 
     def _build_module(self):
         def tensor(arr):
@@ -269,6 +271,21 @@ class ShrinkMVGPR(ShrinkBase):
             L_Om = module.omega_factor(params)["L_Om"]
             params["Omega"] = L_Om @ L_Om.transpose(1, 2)
         return self._posterior_dict({k: v.cpu().numpy() for k, v in params.items()})
+
+    # Hooks of gen_marginal_samples
+
+    def _marginal_frame(self):
+        if self._formula is not None:
+            variables = self._formula.variables
+            return self._formula.data[variables], variables
+        return self._train_frame, list(self._train_frame.columns)
+
+    def _marginal_means(self, new):
+        x_new = new if self._formula is not None else new[self.x_names_]
+        return self.calc_pred_moments(x_new, 1)["means"][0]
+
+    def _response_names(self):
+        return list(self.y_names_)
 
     def _posterior_dict(self, params):
         return {"thetas": pd.DataFrame(params["thetas"],

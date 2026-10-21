@@ -12,6 +12,7 @@ import torch
 from tqdm.auto import tqdm
 
 from ._data import as_matrix, check_bool, check_positive_int
+from ._marginal import MarginalSamples
 from ._utils import lightweight_ols, merge_args
 
 # Number of epochs per auto-stop check
@@ -35,6 +36,69 @@ def _flow_defaults(flow_func):
 
 def _default_device():
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+def _eval_ranges(eval_range, to_eval, data):
+    """Grid ranges of gen_marginal_samples: given, or the ranges in the training data."""
+    if eval_range is None:
+        return [(float(data[v].min()), float(data[v].max())) for v in to_eval]
+    pairs = [eval_range] if len(to_eval) == 1 else list(eval_range)
+    shape = "a pair of numbers" if len(to_eval) == 1 else "two pairs of numbers"
+    try:
+        ranges = [tuple(float(b) for b in pair) for pair in pairs]
+    except (TypeError, ValueError):
+        raise ValueError(f"'eval_range' must be {shape}") from None
+    if len(ranges) != len(to_eval) or any(len(r) != 2 or not np.isfinite(r).all()
+                                          for r in ranges):
+        raise ValueError(f"'eval_range' must be {shape}")
+    return ranges
+
+
+def _one_row(fixed_x, columns):
+    """``fixed_x`` as a one-row DataFrame with the given columns."""
+    if isinstance(fixed_x, dict):
+        fixed_x = pd.DataFrame({k: [v] for k, v in fixed_x.items()})
+    elif isinstance(fixed_x, pd.Series):
+        fixed_x = fixed_x.to_frame().T
+    if not isinstance(fixed_x, pd.DataFrame) or len(fixed_x) == 0:
+        raise TypeError("'fixed_x' must be a DataFrame, Series or dict")
+    missing = [c for c in columns if c not in fixed_x.columns]
+    if missing:
+        raise ValueError(f"'fixed_x' lacks the covariates {missing}")
+    return fixed_x.iloc[[0]][list(columns)].reset_index(drop=True)
+
+
+def load(file, device=None):
+    """Load a model saved with ``save``.
+
+    Parameters
+    ----------
+    file : str, path or file-like
+        The saved model.
+    device : str or torch.device, optional
+        Device to load to. By default the device it was saved from, or the
+        CPU, with a warning, if that was CUDA and CUDA is not available.
+
+    Returns
+    -------
+    ShrinkGPR, ShrinkTPR, ShrinkMVGPR or ShrinkMVTPR
+
+    Notes
+    -----
+    The file is unpickled, which can run arbitrary code: only load files
+    you trust.
+    """
+    content = torch.load(file, map_location="cpu", weights_only=False)
+    if not isinstance(content, dict) or not isinstance(content.get("model"), ShrinkBase):
+        raise TypeError("The file does not contain a model saved with save()")
+    model = content["model"]
+    if device is None:
+        device = model.device
+        if device.type == "cuda" and not torch.cuda.is_available():
+            warnings.warn("Model was trained on CUDA but CUDA is not available. "
+                          "Loading on CPU.", stacklevel=2)
+            device = torch.device("cpu")
+    return model._to_device(device)
 
 
 class ShrinkBase:
@@ -250,6 +314,114 @@ class ShrinkBase:
         # Vertical labels, like R's las = 2
         ax.set_xticks(np.arange(1, thetas.shape[1] + 1), thetas.columns, rotation=90)
         return ax
+
+    # Marginal predictions
+
+    def gen_marginal_samples(self, to_eval, nsamp=200, fixed_x=None, n_eval_points=None,
+                             eval_range=None, display_progress=True):
+        """Posterior predictive means over a grid of one or two covariates.
+
+        For each of ``nsamp`` draws, the other covariates are taken from a
+        random row of the training data, or from ``fixed_x``; the covariates
+        in ``to_eval`` are swept over a regular grid, and the predictive mean
+        of one posterior draw is computed at every grid point.
+
+        Parameters
+        ----------
+        to_eval : str or sequence of one or two str
+            Covariates to sweep: variables of the formulas for models built
+            with ``from_formula``, otherwise columns of ``x`` (or ``x_mean``).
+        nsamp : int
+            Number of draws.
+        fixed_x : DataFrame, Series or dict, optional
+            Values of all covariates, used for every draw; the first row of a
+            DataFrame is used.
+        n_eval_points : int, optional
+            Grid points per covariate; 100 for one covariate and 30 for two.
+            For two, every draw predicts at ``n_eval_points**2`` points.
+        eval_range : pair of float, or two pairs for two covariates, optional
+            Grid ranges; default to the ranges in the training data.
+        display_progress : bool
+            Show a progress bar.
+
+        Returns
+        -------
+        MarginalSamples
+            Its ``mean_pred`` has shape (nsamp, n) or (nsamp, n, n), plus a
+            trailing response axis for the multivariate models; ``plot()``
+            draws it.
+        """
+        self._check_fitted()
+        to_eval = [to_eval] if isinstance(to_eval, str) else list(to_eval)
+        if not 1 <= len(to_eval) <= 2 or not all(isinstance(v, str) for v in to_eval):
+            raise ValueError("'to_eval' must be one or two covariate names")
+        data, valid = self._marginal_frame()
+        unknown = [v for v in to_eval if v not in valid]
+        if unknown:
+            raise ValueError(f"Unknown covariates in 'to_eval': {unknown}; the model's "
+                             f"covariates are {valid}")
+        non_numeric = [v for v in to_eval if not pd.api.types.is_numeric_dtype(data[v])]
+        if non_numeric:
+            raise TypeError(f"Only numeric covariates can be swept, not {non_numeric}")
+        check_positive_int(nsamp=nsamp)
+        check_bool(display_progress=display_progress)
+        if n_eval_points is None:
+            n_eval_points = 100 if len(to_eval) == 1 else 30
+        check_positive_int(n_eval_points=n_eval_points)
+        ranges = _eval_ranges(eval_range, to_eval, data)
+        fixed = None if fixed_x is None else _one_row(fixed_x, data.columns)
+
+        grids = [np.linspace(lo, hi, n_eval_points) for lo, hi in ranges]
+        if len(grids) == 1:
+            sweep = {to_eval[0]: grids[0]}
+        else:
+            # Row order j * n + k, so that predictions reshape to [j, k]
+            sweep = {to_eval[0]: np.repeat(grids[0], n_eval_points),
+                     to_eval[1]: np.tile(grids[1], n_eval_points)}
+        n_rows = n_eval_points ** len(grids)
+
+        draws = []
+        for _ in tqdm(range(nsamp), disable=not display_progress, dynamic_ncols=True):
+            row = fixed if fixed is not None else data.iloc[
+                [torch.randint(len(data), (1,)).item()]]
+            new = pd.DataFrame({c: np.repeat(row[c].to_numpy(), n_rows) for c in row.columns})
+            for v, values in sweep.items():
+                new[v] = values
+            draws.append(self._marginal_means(new))
+        mean_pred = np.stack(draws)
+        if len(grids) == 2:
+            mean_pred = mean_pred.reshape(nsamp, n_eval_points, n_eval_points,
+                                          *mean_pred.shape[2:])
+        return MarginalSamples(mean_pred, grids[0] if len(grids) == 1 else tuple(grids),
+                               to_eval, self._response_names())
+
+    # Saving and loading
+
+    def save(self, file):
+        """Save the model, fitted or not, with its optimizer state, to ``file``.
+
+        The file is written with ``torch.save`` and read back with
+        :func:`shrinkgpr.load`; training can then continue with :meth:`fit`.
+        """
+        from . import __version__
+
+        torch.save({"shrinkgpr_version": __version__, "model": self}, file)
+
+    def _to_device(self, device):
+        """Move the models, the optimizer state and the stored best state to ``device``."""
+        device = torch.device(device)
+        self._module.to(device)
+        if self.is_fitted:
+            # Module.to keeps the Parameter objects, so the optimizer still holds them
+            self.model_.to(device)
+            for state in self.optimizer_.state.values():
+                for k, v in state.items():
+                    # Adam keeps its step counts on the CPU
+                    if isinstance(v, torch.Tensor) and k != "step":
+                        state[k] = v.to(device)
+            self._best_state = {k: v.to(device) for k, v in self._best_state.items()}
+        self.device = device
+        return self
 
     def _design(self, obj, name, names):
         """Covariates for prediction as a tensor on the model's device.

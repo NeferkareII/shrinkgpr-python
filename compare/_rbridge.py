@@ -12,7 +12,7 @@ import numpy as np
 import torch
 
 R_DIR = Path(__file__).parent / "r"
-REFERENCE_SHA = "2580f13"
+REFERENCE_SHA = "bb488f5"
 # Separate R library holding the reference version of shrinkGPR (see README)
 DEFAULT_R_LIB = Path.home() / ".venvs" / "shrinkgpr_rlib"
 

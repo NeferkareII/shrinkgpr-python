@@ -78,6 +78,14 @@ class FormulaDesign:
             self.x_mean = _frame(mm_mean)
             self._x_mean_spec = mm_mean.model_spec
 
+        # Training data and the covariates the formulas use, in data order (for
+        # gen_marginal_samples, like R's model_internals$data)
+        # variables_by_source, not required_variables, which reads x.1 as x
+        specs = [self._x_spec] + ([self._x_mean_spec] if self._x_mean_spec else [])
+        used = set().union(*(s.variables_by_source.get("data", set()) for s in specs))
+        self.variables = [str(c) for c in data.columns if c in used]
+        self.data = data.copy()
+
     def new_x(self, data):
         """Covariance design matrix for new data."""
         return _frame(_build(self._x_spec, data, "the covariates"))
