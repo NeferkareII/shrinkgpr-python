@@ -5,6 +5,7 @@ from .gpr import ShrinkGPR
 from .kernels import kernel_matern_12, kernel_matern_32, kernel_matern_52, kernel_se
 from .mvgpr import ShrinkMVGPR
 from .mvtpr import ShrinkMVTPR
+from .sim_gpr import sim_gpr
 from .sim_mvgpr import sim_mvgpr
 from .tpr import ShrinkTPR
 
@@ -24,6 +25,7 @@ __all__ = [
     "kernel_matern_52",
     "kernel_se",
     "nsf_cl",
+    "sim_gpr",
     "sim_mvgpr",
     "sylvester",
 ]

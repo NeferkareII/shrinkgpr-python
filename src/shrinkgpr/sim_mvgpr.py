@@ -15,6 +15,11 @@ def _f64(v):
     return torch.tensor(float(v), dtype=torch.float64)
 
 
+def _columns(prefix, k):
+    """Column names of a k-column matrix in an R data.frame: ``x``, or ``x.1..x.k``."""
+    return [prefix] if k == 1 else [f"{prefix}.{j + 1}" for j in range(k)]
+
+
 def rlkjcorr(M, eta=1.0):
     """One M x M correlation matrix from the LKJ(eta) distribution (onion method).
 
@@ -79,7 +84,8 @@ def sim_mvgpr(N=200, M=2, d=3, sigma2=0.1, tau=2, kernel_func=kernel_se, perc_sp
     Returns
     -------
     dict
-        ``data``: a DataFrame with columns ``y.1..y.M`` and ``x.1..x.d``;
+        ``data``: a DataFrame with columns ``y.1..y.M`` and ``x.1..x.d``
+        (``x`` for ``d = 1``, as in R);
         ``true_vals``: a dict with ``theta``, ``Omega``, ``sigma2`` and ``tau``.
     """
     for name, v in {"N": N, "M": M, "d": d}.items():
@@ -141,7 +147,6 @@ def sim_mvgpr(N=200, M=2, d=3, sigma2=0.1, tau=2, kernel_func=kernel_se, perc_sp
 
     y_np, x_np = y.cpu().double().numpy(), x.cpu().double().numpy()
     data = pd.DataFrame(np.column_stack([y_np, x_np]),
-                        columns=[f"y.{j + 1}" for j in range(M)]
-                        + [f"x.{j + 1}" for j in range(d)])
+                        columns=_columns("y", M) + _columns("x", d))
     return {"data": data,
             "true_vals": {"theta": theta, "Omega": Omega, "sigma2": sigma2, "tau": tau}}
