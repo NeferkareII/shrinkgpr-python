@@ -1,8 +1,13 @@
-"""Behaviour shared by all models: the ShrinkBase training loop and the prediction interface."""
+"""Behaviour shared by all models: the ShrinkBase training loop, prediction,
+posterior samples and plots."""
 
+import matplotlib
 import numpy as np
 import pytest
 import torch
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
 import shrinkgpr
 from shrinkgpr import (
@@ -179,3 +184,67 @@ def test_unfitted_model_cannot_predict(data, cls):
     for method in (model.predict, model.calc_pred_moments):
         with pytest.raises(RuntimeError, match="not fitted"):
             method(x_test)
+    with pytest.raises(RuntimeError, match="not fitted"):
+        model.gen_posterior_samples(5)
+
+
+# Posterior samples and plots
+
+
+def expected_posterior(model, nsamp):
+    if isinstance(model, ShrinkMVGPR):
+        shapes = {"thetas": (nsamp, 2), "tau": (nsamp,), "sigma2": (nsamp,),
+                  "tau_Om": (nsamp,), "Omega": (nsamp, M, M)}
+    else:
+        shapes = {"thetas": (nsamp, 2), "sigma2": (nsamp,), "tau": (nsamp,)}
+    if isinstance(model, (ShrinkTPR, ShrinkMVTPR)):
+        shapes["nu"] = (nsamp,)
+    return shapes
+
+
+def test_gen_posterior_samples(fitted_model):
+    post = fitted_model.gen_posterior_samples(50)
+    assert {k: v.shape for k, v in post.items()} == expected_posterior(fitted_model, 50)
+    assert list(post["thetas"].columns) == ["theta_x1", "theta_x2"]
+    for k in ("thetas", "sigma2", "tau"):
+        assert (np.asarray(post[k]) > 0).all()
+    if "nu" in post:
+        # nu is shifted by 2 in both t processes
+        assert (post["nu"] > 2).all()
+    if "Omega" in post:
+        np.testing.assert_allclose(post["Omega"], post["Omega"].transpose(0, 2, 1), rtol=1e-6)
+        assert (np.linalg.eigvalsh(post["Omega"]) > 0).all()
+    with pytest.raises(ValueError, match="nsamp"):
+        fitted_model.gen_posterior_samples(0)
+
+
+@pytest.mark.parametrize("cls", [ShrinkGPR, ShrinkTPR], ids=lambda c: c.__name__)
+def test_univariate_posterior_is_the_raw_flow_output(data, cls):
+    """As in R: the transformed latent vector, sliced, with nu shifted by 2."""
+    y, x, _, _ = split(cls, data)
+    x_mean = np.column_stack([np.ones(N_TRAIN), x[:, 0]])
+    torch.manual_seed(0)
+    model = cls(y, x, x_mean, device="cpu").fit(n_epochs=3, display_progress=False)
+    torch.manual_seed(3)
+    post = model.gen_posterior_samples(8)
+    torch.manual_seed(3)
+    with torch.no_grad():
+        zk = model.model_(model.model_.gen_batch(8))[0].numpy()
+    np.testing.assert_array_equal(post["thetas"].to_numpy(), zk[:, :2])
+    np.testing.assert_array_equal(post["sigma2"], zk[:, 2])
+    np.testing.assert_array_equal(post["tau"], zk[:, 3])
+    np.testing.assert_array_equal(post["betas"].to_numpy(), zk[:, 4:6])
+    np.testing.assert_array_equal(post["tau_mean"], zk[:, 6])
+    assert list(post["betas"].columns) == ["beta_x_mean1", "beta_x_mean2"]
+    if cls is ShrinkTPR:
+        np.testing.assert_array_equal(post["nu"], zk[:, -1] + 2)
+
+
+def test_plot_draws_theta_boxplots(fitted_model):
+    ax = fitted_model.plot(nsamp=30)
+    assert [t.get_text() for t in ax.get_xticklabels()] == ["theta_x1", "theta_x2"]
+    assert all(t.get_rotation() == 90 for t in ax.get_xticklabels())
+    # Drawing on given axes
+    _, own = plt.subplots()
+    assert fitted_model.plot(nsamp=30, ax=own) is own
+    plt.close("all")

@@ -148,6 +148,19 @@ handlers$mv_pred <- function(inp) {
   out
 }
 
+handlers$mv_posterior <- function(inp) {
+  set_replay(list(D(inp$z)))
+  m <- new_mv(inp, mv_replay_class(inp$model))
+  load_state(m, inp$state, dtype)
+  p <- D(inp$x)$size(2)
+  M <- D(inp$y)$size(2)
+  fo <- reformulate(paste0("X", seq_len(p)),
+                    str2lang(paste0("cbind(", paste0("Y", seq_len(M), collapse = ", "), ")")))
+  mod <- structure(list(model = m, model_internals = list(d_cov = p, M = M, terms = terms(fo))),
+                   class = mv_r_class[[inp$model]])
+  flat_posterior(gen_posterior_samples(mod, nsamp = inp$nsamp))
+}
+
 handlers$mv_train <- function(inp) {
   # Feed fixed base samples to R's own training loop: a model whose gen_batch
   # replays them, passed to shrinkMVGPR()/shrinkMVTPR() as a continuation model

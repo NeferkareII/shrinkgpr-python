@@ -82,3 +82,16 @@ class ShrinkTPR(ShrinkGPR):
         means, covs, nu = self.model_.calc_pred_moments(x_t, nsamp, xm_t)
         return {"means": means.cpu().numpy(), "vars": covs.cpu().numpy(),
                 "nu": nu.cpu().numpy()}
+
+    # Posterior
+
+    def gen_posterior_samples(self, nsamp=1000):
+        """Draws from the variational approximation of the posterior.
+
+        As for :meth:`ShrinkGPR.gen_posterior_samples`, plus the degrees of
+        freedom ``nu`` (array of shape (nsamp,)).
+        """
+        return super().gen_posterior_samples(nsamp)
+
+    def _posterior_dict(self, zk):
+        return {**super()._posterior_dict(zk), "nu": zk[:, -1] + 2}

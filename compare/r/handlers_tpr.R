@@ -83,6 +83,21 @@ handlers$tpr_pred <- function(inp) {
        predict = draws, chi2_df = rec$df, eval_pred_dens = dens)
 }
 
+handlers$tpr_posterior <- function(inp) {
+  set_replay(list(D(inp$z)))
+  m <- new_tpr(inp, TPR_replay)
+  load_state(m, inp$state, dtype)
+  p <- D(inp$x)$size(2)
+  internals <- list(d_cov = p, terms = terms(reformulate(paste0("X", seq_len(p)), "y")),
+                    x_mean = !is.null(inp$x_mean))
+  if (internals$x_mean) {
+    internals$d_mean <- D(inp$x_mean)$size(2)
+    internals$x_mean_names <- paste0("M", seq_len(internals$d_mean))
+  }
+  mod <- structure(list(model = m, model_internals = internals), class = "shrinkTPR")
+  flat_posterior(gen_posterior_samples(mod, nsamp = inp$nsamp))
+}
+
 handlers$tpr_train <- function(inp) {
   # As the GPR train handler: replayed base samples through R's own loop
   replay <- set_replay(lapply(inp$zs, D))

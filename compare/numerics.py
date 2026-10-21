@@ -15,9 +15,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import torch
 
 from shrinkgpr import ShrinkGPR
+from shrinkgpr._formula import FormulaDesign
 from shrinkgpr._gpr_module import GPRModule, ldnorm
 from shrinkgpr._hyperu import log_hyperu, robust_hyperu
 from shrinkgpr._utils import lightweight_ols, res_protector, robust_chol
@@ -69,6 +71,12 @@ def _perturb(module, scale, seed):
 
 def _grads(module, prefix="grad."):
     return {prefix + k: p.grad for k, p in module.named_parameters()}
+
+
+def _columns_of(df):
+    """DataFrame columns for R: numeric columns as arrays, others as lists of strings."""
+    return {c: df[c].to_numpy(dtype=float) if pd.api.types.is_numeric_dtype(df[c])
+            else [str(v) for v in df[c]] for c in df.columns}
 
 
 def plugin_names():
@@ -241,6 +249,16 @@ def build_cases(dtype, plugins=None):
                            "eval_pred_dens": dens},
                           tol="r_scalar"))
 
+        # Posterior samples: the same model and base samples through R's
+        # gen_posterior_samples()
+        wrapper = ShrinkGPR(y_gp, x_gp, x_mean_gp if with_mean else None, n_layers=1,
+                            device="cpu")
+        wrapper.model_ = module
+        post = wrapper.gen_posterior_samples(6)
+        cases.append(Case(f"posterior {label}", "posterior",
+                          {**inputs, "state": _state(module), "z": z_pred, "nsamp": 6},
+                          {k: np.asarray(v) for k, v in post.items()}, tol="r_scalar"))
+
         if i < 2:
             n_epochs = 30
             torch.manual_seed(200 + i)
@@ -281,14 +299,71 @@ def build_cases(dtype, plugins=None):
             draws = model.predict(x_new_gp, nsamp=20, x_mean_new=xm_new)
             torch.manual_seed(13)
             lpds = model.lpds(y_new_gp[0], x_new_gp[:1], nsamp=20, x_mean_new=xm_row)
+            torch.manual_seed(14)
+            post = model.gen_posterior_samples(20)
             cases.append(Case(f"end to end shrinkGPR() {'mean' if with_mean else 'no mean'}",
                               "end_to_end",
                               {"y": y_gp, "x": x_gp, "seed": 7, "n_epochs": n_epochs,
                                "with_mean": with_mean, "x_new": x_new_gp, "y_new": y_new_gp},
                               {"loss_stor": model.loss_stor_, "loss": np.array(model.loss_),
                                "means": moments["means"], "vars": moments["vars"],
-                               "predict": draws, "lpds": np.array(lpds)},
+                               "predict": draws, "lpds": np.array(lpds),
+                               **{f"post.{k}": np.asarray(v) for k, v in post.items()}},
                               tol="train"))
+
+    # Formula interface: formulaic design matrices against R's model.matrix
+    # (covariance formula without intercept, mean formula with), for the
+    # training data and, through the stored specs, for new data
+    n_f = 9
+    df_f = pd.DataFrame({"y": rng.normal(size=n_f), "x1": rng.normal(size=n_f),
+                         "x2": np.exp(rng.normal(size=n_f)), "f": list("abc") * 3})
+    df_f_new = pd.DataFrame({"y": rng.normal(size=3), "x1": rng.normal(size=3),
+                             "x2": np.exp(rng.normal(size=3)), "f": ["b", "b", "c"]})
+    designs = [
+        ("y ~ x1 + x2", "y ~ x1 + x2", "~ x1", "~ x1"),
+        ("y ~ x1 * x2", "y ~ x1 * x2", None, None),
+        ("y ~ f + x1", "y ~ f + x1", "~ x2 + f", "~ x2 + f"),
+        ("y ~ np.log(x2) + x1:f", "y ~ log(x2) + x1:f", "~ f", "~ f"),
+    ]
+    for py_f, r_f, py_m, r_m in designs:
+        design = FormulaDesign(py_f, df_f, py_m)
+        expected = {"x": design.x.to_numpy(), "x_new": design.new_x(df_f_new).to_numpy()}
+        if py_m is not None:
+            expected["x_mean"] = design.x_mean.to_numpy()
+            expected["x_mean_new"] = design.new_x_mean(df_f_new).to_numpy()
+        cases.append(Case(f"design {r_f}" + (f", mean {r_m}" if r_m else ""), "design",
+                          {"data": _columns_of(df_f), "data_new": _columns_of(df_f_new),
+                           "formula": r_f, "formula_mean": r_m},
+                          expected))
+
+    # End to end through from_formula and R's formula interface, with a factor
+    # and a mean formula
+    if dtype == "float32":
+        df_e = pd.DataFrame({"x1": rng.normal(size=N), "x2": rng.normal(size=N),
+                             "f": list("abc") * (N // 3)})
+        df_e["y"] = np.sin(2 * df_e["x1"]) + 0.1 * rng.normal(size=N)
+        df_e_new = df_e.iloc[:4].copy()
+        df_e_new[["x1", "x2"]] = rng.normal(size=(4, 2))
+        torch.manual_seed(8)
+        model = ShrinkGPR.from_formula("y ~ x1 + f", df_e, formula_mean="~ x2", device="cpu")
+        model.fit(n_epochs=30, auto_stop=False, display_progress=False)
+        torch.manual_seed(11)
+        moments = model.calc_pred_moments(df_e_new, nsamp=20)
+        torch.manual_seed(12)
+        draws = model.predict(df_e_new, nsamp=20)
+        torch.manual_seed(13)
+        lpds = model.lpds(df_e_new["y"].iloc[0], df_e_new.iloc[[0]], nsamp=20)
+        # Posterior values only: R names the factor columns fa, formulaic f[a]
+        torch.manual_seed(14)
+        post = model.gen_posterior_samples(20)
+        cases.append(Case("end to end shrinkGPR() formula with factor", "formula_end_to_end",
+                          {"data": _columns_of(df_e), "data_new": _columns_of(df_e_new),
+                           "formula": "y ~ x1 + f", "formula_mean": "~ x2", "seed": 8,
+                           "n_epochs": 30},
+                          {"loss_stor": model.loss_stor_, "means": moments["means"],
+                           "vars": moments["vars"], "predict": draws, "lpds": np.array(lpds),
+                           **{f"post.{k}": np.asarray(v) for k, v in post.items()}},
+                          tol="train"))
 
     # Cases of further models live in compare/cases_<model>.py, each with a
     # build_cases(dtype) returning a list of Case; their R handlers live in

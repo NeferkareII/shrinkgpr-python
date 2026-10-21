@@ -3,6 +3,7 @@
 import warnings
 
 import numpy as np
+import pandas as pd
 import torch
 
 from ._base import ShrinkBase
@@ -13,6 +14,7 @@ from ._data import (
     check_positive_int,
     check_positive_scalar,
 )
+from ._formula import FormulaDesign
 from ._gpr_module import GPRModule
 from .flows import sylvester
 from .kernels import kernel_se
@@ -100,6 +102,37 @@ class ShrinkGPR(ShrinkBase):
             tensor(y_np), tensor(x_np), tensor(x_mean_np), **self._module_kwargs()
         ).to(self.device)
 
+    @classmethod
+    def from_formula(cls, formula, data, formula_mean=None, **kwargs):
+        """Build the model from formula strings, as R's fit function does.
+
+        Parameters
+        ----------
+        formula : str
+            Response and covariance covariates, e.g. ``"y ~ x1 + x2"``. The
+            design matrix has no intercept; factors and interactions are coded
+            as in R (via formulaic).
+        data : pandas.DataFrame
+            Data with the variables of both formulas.
+        formula_mean : str, optional
+            Covariates of the linear mean, e.g. ``"~ x1"``; keeps its
+            intercept, named ``Intercept``.
+        **kwargs
+            Further arguments of the constructor.
+
+        Prediction methods then take ``x_new`` as a DataFrame and build both
+        design matrices from it.
+        """
+        if "x_mean" in kwargs:
+            raise TypeError("Use 'formula_mean' instead of 'x_mean' with from_formula")
+        design = FormulaDesign(formula, data, formula_mean)
+        if design.y.shape[1] != 1:
+            raise ValueError(f"{cls.__name__} has a single response; use ShrinkMVGPR for "
+                             "several")
+        model = cls(design.y.iloc[:, 0], design.x, design.x_mean, **kwargs)
+        model._formula = design
+        return model
+
     def _module_kwargs(self):
         return {"a": self.a, "c": self.c, "a_mean": self.a_mean, "c_mean": self.c_mean,
                 "sigma2_rate": self.sigma2_rate, "n_layers": self.n_layers,
@@ -122,6 +155,12 @@ class ShrinkGPR(ShrinkBase):
             if x_mean_new is not None:
                 raise ValueError("'x_mean_new' requires 'x_new'")
             return module.x, module.x_mean
+        if self._formula is not None:
+            if x_mean_new is not None:
+                raise ValueError("'x_mean_new' is not used by models built with from_formula; "
+                                 "'x_new' holds the covariates of both formulas")
+            design = self._formula_data(x_new)
+            x_new, x_mean_new = design.new_x(x_new), design.new_x_mean(x_new)
         x_t = self._design(x_new, "x_new", self.x_names_)
         if module.mean_zero:
             if x_mean_new is not None:
@@ -218,3 +257,35 @@ class ShrinkGPR(ShrinkBase):
             raise ValueError("'y_new' must be a single value")
         return float(self.eval_pred_dens(y_new, x_new, nsamp, log=True,
                                          x_mean_new=x_mean_new)[0])
+
+    # Posterior
+
+    def gen_posterior_samples(self, nsamp=1000):
+        """Draws from the variational approximation of the posterior.
+
+        Parameters
+        ----------
+        nsamp : int
+            Number of draws.
+
+        Returns
+        -------
+        dict
+            ``thetas`` (DataFrame with columns ``theta_<covariate>``),
+            ``sigma2`` and ``tau`` (arrays of shape (nsamp,)); for models with
+            a mean also ``betas`` (DataFrame with columns ``beta_<covariate>``)
+            and ``tau_mean``.
+        """
+        # As in R, the raw flow output, without the zero-guards of training
+        return self._posterior_dict(self._posterior_draws(nsamp).cpu().numpy())
+
+    def _posterior_dict(self, zk):
+        p = len(self.x_names_)
+        res = {"thetas": pd.DataFrame(zk[:, :p], columns=[f"theta_{n}" for n in self.x_names_]),
+               "sigma2": zk[:, p], "tau": zk[:, p + 1]}
+        if self.x_mean_names_ is not None:
+            q = len(self.x_mean_names_)
+            res["betas"] = pd.DataFrame(zk[:, p + 2 : p + 2 + q],
+                                        columns=[f"beta_{n}" for n in self.x_mean_names_])
+            res["tau_mean"] = zk[:, p + 2 + q]
+        return res

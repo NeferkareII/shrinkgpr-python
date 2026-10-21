@@ -1,10 +1,12 @@
 """User-facing multivariate Gaussian process regression (port of R/shrinkMVGPR.R)."""
 
 import numpy as np
+import pandas as pd
 import torch
 
 from ._base import ADAM_DEFAULTS, ShrinkBase
 from ._data import as_matrix, check_bool, check_positive_int, check_positive_scalar
+from ._formula import FormulaDesign
 from ._mvgpr_module import MVGPRModule
 from .flows import sylvester
 from .kernels import kernel_se
@@ -108,6 +110,28 @@ class ShrinkMVGPR(ShrinkBase):
         ).to(self.device)
         del self._y_np, self._x_np
 
+    @classmethod
+    def from_formula(cls, formula, data, **kwargs):
+        """Build the model from a formula string, as R's fit function does.
+
+        Parameters
+        ----------
+        formula : str
+            Responses and covariates, e.g. ``"cbind(y1, y2) ~ x1 + x2"`` or
+            ``"y1 + y2 ~ x1 + x2"``. The design matrix has no intercept;
+            factors and interactions are coded as in R (via formulaic).
+        data : pandas.DataFrame
+            Data with the variables of the formula.
+        **kwargs
+            Further arguments of the constructor.
+
+        Prediction methods then take ``x_new`` as a DataFrame.
+        """
+        design = FormulaDesign(formula, data)
+        model = cls(design.y, design.x, **kwargs)
+        model._formula = design
+        return model
+
     def _module_kwargs(self):
         return {"a": self.a, "c": self.c, "eta": self.eta, "a_Om": self.a_Om,
                 "c_Om": self.c_Om, "sigma2_rate": self.sigma2_rate,
@@ -124,7 +148,11 @@ class ShrinkMVGPR(ShrinkBase):
     # Prediction
 
     def _new_x(self, x_new):
-        return self.model_.x if x_new is None else self._design(x_new, "x_new", self.x_names_)
+        if x_new is None:
+            return self.model_.x
+        if self._formula is not None:
+            x_new = self._formula_data(x_new).new_x(x_new)
+        return self._design(x_new, "x_new", self.x_names_)
 
     def calc_pred_moments(self, x_new=None, nsamp=100):
         """Parameters of the predictive distribution per posterior draw.
@@ -214,6 +242,38 @@ class ShrinkMVGPR(ShrinkBase):
             raise ValueError(f"'y_new' must be a single response vector of length "
                              f"{self.model_.M}")
         return float(self.eval_pred_dens(y_new.reshape(1, -1), x_new, nsamp, log=True)[0])
+
+    # Posterior
+
+    def gen_posterior_samples(self, nsamp=1000):
+        """Draws from the variational approximation of the posterior.
+
+        Parameters
+        ----------
+        nsamp : int
+            Number of draws.
+
+        Returns
+        -------
+        dict
+            ``thetas`` (DataFrame with columns ``theta_<covariate>``),
+            ``tau``, ``sigma2`` and ``tau_Om`` (arrays of shape (nsamp,)) and
+            ``Omega`` (array of shape (nsamp, M, M), rows and columns in the
+            order of ``y_names_``).
+        """
+        zk = self._posterior_draws(nsamp)
+        module = self.model_
+        with torch.no_grad():
+            # As in R, with the zero-guards of prediction (sigma2 at 1e-6)
+            params = module.unpack(zk, sigma2_tol=1e-6)
+            L_Om = module.omega_factor(params)["L_Om"]
+            params["Omega"] = L_Om @ L_Om.transpose(1, 2)
+        return self._posterior_dict({k: v.cpu().numpy() for k, v in params.items()})
+
+    def _posterior_dict(self, params):
+        return {"thetas": pd.DataFrame(params["thetas"],
+                                       columns=[f"theta_{n}" for n in self.x_names_]),
+                **{k: params[k] for k in ("tau", "sigma2", "tau_Om", "Omega")}}
 
 
 def _as_numpy(obj):

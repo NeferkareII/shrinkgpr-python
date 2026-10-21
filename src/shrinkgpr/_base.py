@@ -52,6 +52,9 @@ class ShrinkBase:
     _adam_defaults = ADAM_DEFAULTS
     _max_grad_norm = None
 
+    # FormulaDesign of models built with from_formula
+    _formula = None
+
     def _setup(self, *, kernel_func, n_layers, flow_func, flow_args, device):
         """Check and store the arguments shared by all models."""
         check_positive_int(n_layers=n_layers)
@@ -200,6 +203,53 @@ class ShrinkBase:
             print("\n".join(msg), file=sys.stderr)
 
         return self
+
+    @property
+    def formula_(self):
+        """The covariance formula of models built with ``from_formula``, else None."""
+        return None if self._formula is None else self._formula.formula
+
+    def _formula_data(self, x_new):
+        """Check new data of a formula model; returns the formula design."""
+        if not isinstance(x_new, pd.DataFrame):
+            raise TypeError(f"This {type(self).__name__} was built with from_formula; "
+                            "'x_new' must be a DataFrame with the variables of the formula")
+        return self._formula
+
+    def _posterior_draws(self, nsamp):
+        """``nsamp`` draws of the transformed latent vector from the best model."""
+        self._check_fitted()
+        check_positive_int(nsamp=nsamp)
+        module = self.model_
+        with torch.no_grad():
+            zk, _ = module(module.gen_batch(nsamp))
+        return zk
+
+    def plot(self, nsamp=1000, ax=None, **kwargs):
+        """Boxplots of posterior draws of the inverse length scales ``theta``.
+
+        Parameters
+        ----------
+        nsamp : int
+            Number of posterior draws.
+        ax : matplotlib.axes.Axes, optional
+            Axes to draw on; a new figure is created by default.
+        **kwargs
+            Passed to ``Axes.boxplot``.
+
+        Returns
+        -------
+        matplotlib.axes.Axes
+        """
+        import matplotlib.pyplot as plt
+
+        thetas = self.gen_posterior_samples(nsamp)["thetas"]
+        if ax is None:
+            _, ax = plt.subplots()
+        ax.boxplot(thetas.to_numpy(), **kwargs)
+        # Vertical labels, like R's las = 2
+        ax.set_xticks(np.arange(1, thetas.shape[1] + 1), thetas.columns, rotation=90)
+        return ax
 
     def _design(self, obj, name, names):
         """Covariates for prediction as a tensor on the model's device.

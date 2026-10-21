@@ -15,6 +15,18 @@ cpu <- torch_device("cpu")
 
 first <- function(x) if (is.list(x)) x[[1]] else x
 
+# A data frame from numeric arrays and lists of strings (factors)
+as_df <- function(cols) {
+  as.data.frame(lapply(cols, function(v) {
+    if (is_tensor_json(v)) as.numeric(unlist(v$data)) else factor(unlist(v))
+  }))
+}
+
+# gen_posterior_samples() output with nsamp x 1 matrices as vectors
+flat_posterior <- function(res) {
+  lapply(res, function(v) if (is.matrix(v) && ncol(v) == 1) as.numeric(v) else unname(v))
+}
+
 # A GPR_class whose gen_batch replays a list of base samples in order
 set_replay <- function(zs) {
   replay <- new.env()
@@ -119,6 +131,62 @@ handlers <- list(
          eval_pred_dens = dens)
   },
 
+  posterior = function(inp) {
+    replay <- set_replay(list(D(inp$z)))
+    m <- new_gpr(inp, GPR_replay)
+    load_state(m, inp$state, dtype)
+    p <- D(inp$x)$size(2)
+    internals <- list(d_cov = p, terms = terms(reformulate(paste0("X", seq_len(p)), "y")),
+                      x_mean = !is.null(inp$x_mean))
+    if (internals$x_mean) {
+      internals$d_mean <- D(inp$x_mean)$size(2)
+      internals$x_mean_names <- paste0("M", seq_len(internals$d_mean))
+    }
+    mod <- structure(list(model = m, model_internals = internals), class = "shrinkGPR")
+    flat_posterior(gen_posterior_samples(mod, nsamp = inp$nsamp))
+  },
+
+  design = function(inp) {
+    df <- as_df(inp$data)
+    df_new <- as_df(inp$data_new)
+    # As in shrinkGPR(): the covariance design has no intercept
+    mf <- model.frame(as.formula(inp$formula), df)
+    mt <- attr(mf, "terms")
+    attr(mt, "intercept") <- 0
+    tn <- delete.response(mt)
+    out <- list(x = unname(model.matrix(mt, mf)),
+                x_new = unname(model.matrix(tn, model.frame(tn, df_new,
+                                                            xlev = .getXlevels(mt, mf)))))
+    if (!is.null(inp$formula_mean)) {
+      mf_mean <- model.frame(as.formula(inp$formula_mean), df)
+      mt_mean <- attr(mf_mean, "terms")
+      out$x_mean <- unname(model.matrix(mt_mean, mf_mean))
+      out$x_mean_new <- unname(model.matrix(mt_mean, model.frame(
+        mt_mean, df_new, xlev = .getXlevels(mt_mean, mf_mean))))
+    }
+    out
+  },
+
+  formula_end_to_end = function(inp) {
+    df <- as_df(inp$data)
+    df_new <- as_df(inp$data_new)
+    torch_manual_seed(inp$seed)
+    res <- shrinkGPR(as.formula(inp$formula), data = df,
+                     formula_mean = as.formula(inp$formula_mean), n_epochs = inp$n_epochs,
+                     auto_stop = FALSE, display_progress = FALSE, device = cpu)
+    torch_manual_seed(11)
+    moments <- calc_pred_moments(res, newdata = df_new, nsamp = 20)
+    torch_manual_seed(12)
+    draws <- predict(res, newdata = df_new, nsamp = 20)
+    torch_manual_seed(13)
+    lpds <- LPDS(res, df_new[1, ], nsamp = 20)
+    torch_manual_seed(14)
+    post <- flat_posterior(gen_posterior_samples(res, nsamp = 20))
+    names(post) <- paste0("post.", names(post))
+    c(list(loss_stor = res$loss_stor, means = moments$means, vars = moments$vars,
+           predict = draws, lpds = lpds), post)
+  },
+
   train = function(inp) {
     # Feed fixed base samples to R's own training loop: a GPR_class whose
     # gen_batch replays them, passed to shrinkGPR() as a continuation model
@@ -152,8 +220,11 @@ handlers <- list(
     draws <- predict(res, newdata = df_new, nsamp = 20)
     torch_manual_seed(13)
     lpds <- LPDS(res, df_new[1, ], nsamp = 20)
-    list(loss_stor = res$loss_stor, loss = res$loss, means = moments$means,
-         vars = moments$vars, predict = draws, lpds = lpds)
+    torch_manual_seed(14)
+    post <- flat_posterior(gen_posterior_samples(res, nsamp = 20))
+    names(post) <- paste0("post.", names(post))
+    c(list(loss_stor = res$loss_stor, loss = res$loss, means = moments$means,
+           vars = moments$vars, predict = draws, lpds = lpds), post)
   }
 )
 

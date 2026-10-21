@@ -124,6 +124,15 @@ def build_cases(dtype):
                            "chi2_df": pred_nu, "eval_pred_dens": dens},
                           tol="r_scalar"))
 
+        # Posterior samples from the same model and base samples
+        wrapper = ShrinkTPR(y_tp, x_tp, x_mean_tp if with_mean else None, n_layers=1,
+                            device="cpu")
+        wrapper.model_ = module
+        post = wrapper.gen_posterior_samples(6)
+        cases.append(Case(f"tpr posterior {label}", "tpr_posterior",
+                          {**inputs, "state": _state(module), "z": z_pred, "nsamp": 6},
+                          {k: np.asarray(v) for k, v in post.items()}, tol="r_scalar"))
+
         if i < 2:
             n_epochs = 30
             torch.manual_seed(400 + i)

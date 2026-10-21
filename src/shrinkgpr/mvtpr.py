@@ -62,3 +62,14 @@ class ShrinkMVTPR(ShrinkMVGPR):
             shape (nsamp,).
         """
         return super().calc_pred_moments(x_new, nsamp)
+
+    def gen_posterior_samples(self, nsamp=1000):
+        """Draws from the variational approximation of the posterior.
+
+        As for :meth:`ShrinkMVGPR.gen_posterior_samples`, plus the degrees of
+        freedom ``nu`` (array of shape (nsamp,)).
+        """
+        return super().gen_posterior_samples(nsamp)
+
+    def _posterior_dict(self, params):
+        return {**super()._posterior_dict(params), "nu": params["nu"]}

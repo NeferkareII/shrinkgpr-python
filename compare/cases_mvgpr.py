@@ -99,6 +99,14 @@ def build_model_cases(dtype, model, module_cls, user_cls, extra=None, seed=0,
                            "with_predict": with_predict},
                           expected, tol="r_scalar"))
 
+        # Posterior samples from the same model and base samples
+        wrapper = user_cls(y, x, n_layers=1, device="cpu", **extra)
+        wrapper.model_ = module
+        post = wrapper.gen_posterior_samples(6)
+        cases.append(Case(f"{tag} posterior {label}", "mv_posterior",
+                          {**inputs, "state": _state(module), "z": z_pred, "nsamp": 6},
+                          {k: np.asarray(v) for k, v in post.items()}, tol="r_scalar"))
+
         if i < 2:
             n_epochs = 30
             torch.manual_seed(400 + i)

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Python port of the R package **shrinkGPR** (https://github.com/NeferkareII/shrinkGPR, version 2.1.1). The package does variational inference for Gaussian process regression with hierarchical shrinkage priors, with the posterior approximated by normalizing flows trained in PyTorch.
 
-- **Reference commit: `223d3e2`.** The Python code should reproduce the numerics of that commit. Read the R source at `https://raw.githubusercontent.com/NeferkareII/shrinkGPR/223d3e2/R/<file>.R`.
+- **Reference commit: `2580f13`.** The Python code should reproduce the numerics of that commit. Read the R source at `https://raw.githubusercontent.com/NeferkareII/shrinkGPR/2580f13/R/<file>.R`.
   - When the reference changes, update `REFERENCE_SHA` in `compare/_rbridge.py` and the install command in `compare/README.md`, and reinstall the R package into `~/.venvs/shrinkgpr_rlib`.
   - Also check `compare/r/handlers_*.R` for hand copies of R internals, such as `mv_elbo_parts`.
 ## Commands
@@ -34,14 +34,14 @@ uv run python -m compare.benchmark              # training speed, Python vs R
 - **The venv lives outside OneDrive.** It is at `C:\Users\knaus\.venvs\shrinkgpr`, set through the user environment variable `UV_PROJECT_ENVIRONMENT`. Don't create a `.venv` inside the repository.
 - **torch comes from the PyTorch CUDA 13.0 index** (`pytorch-cu130` in `pyproject.toml`). That index has Python 3.15 wheels and supports the RTX 5080 (Blackwell). Everything else comes from PyPI.
 
-## Current scope: univariate `shrinkGPR` only
+## Scope
 
-Port these first:
-- constructing a `ShrinkGPR` model, from arrays or with `from_formula`, including the optional linear mean (`x_mean` / `formula_mean`);
+Ported for `ShrinkGPR`, `ShrinkTPR`, `ShrinkMVGPR` and `ShrinkMVTPR`:
+- constructing a model, from arrays or with `from_formula`, including the optional linear mean of the univariate models (`x_mean` / `formula_mean`);
 - training with `.fit()`;
 - prediction methods: `predict`, `calc_pred_moments`, `eval_pred_dens`, `lpds`;
 - checking: `loss_stor_`, `gen_posterior_samples`, and `plot`, which draws boxplots of θ;
-- `sim_gpr` (the port of `simGPR`), to simulate data for checks.
+- `sim_gpr` and `sim_mvgpr` (the ports of `simGPR` and `simMVGPR`), to simulate data for checks.
 
 The fit depends on these R files:
 - `GPR_class.R`;
@@ -53,12 +53,11 @@ The fit depends on these R files:
 - `internal_utils.R`;
 - the univariate branches of `pred_functions.R` and `plot_functions.R`.
 
-Also ported, with the same methods as `ShrinkGPR` (`fit`, `predict`, `calc_pred_moments`, `eval_pred_dens`, `lpds`):
+The further models:
 - `ShrinkTPR(ShrinkGPR)` in `tpr.py` / `_tpr_module.py`;
-- `ShrinkMVGPR` in `mvgpr.py` / `_mvgpr_module.py`, and `ShrinkMVTPR(ShrinkMVGPR)` in `mvtpr.py` / `_mvtpr_module.py`. R has no linear mean for these, so there is no `x_mean`;
-- `sim_mvgpr` (port of `simMVGPR`).
+- `ShrinkMVGPR` in `mvgpr.py` / `_mvgpr_module.py`, and `ShrinkMVTPR(ShrinkMVGPR)` in `mvtpr.py` / `_mvtpr_module.py`. R has no linear mean for these, so there is no `x_mean`.
 
-Their R comparison cases are plugins (`compare/cases_<model>.py`, `compare/r/handlers_<model>.R`). `tests/test_models.py` checks the behaviour shared by all four models. `from_formula`, `gen_posterior_samples` and `plot` still have to be added to every model.
+Shared code lives in `ShrinkBase` (`_base.py`: `fit`, `plot`, formula and posterior helpers) and `_formula.py` (`FormulaDesign`). The R comparison cases of the further models are plugins (`compare/cases_<model>.py`, `compare/r/handlers_<model>.R`). `tests/test_models.py` checks the behaviour shared by all four models.
 
 Deferred until later:
 - `gen_marginal_samples` and its plots;
@@ -84,7 +83,10 @@ samples = model.predict(x_new, nsamp=100)
   - Validates the arguments and builds the model, but does not train it.
 - **`ShrinkGPR.from_formula("y ~ x1 + x2", data=df, formula_mean="~ x1", **kwargs)`:**
   - builds the design matrices with `formulaic`;
-  - stores the model specs, so `x_new` DataFrames are turned into the same columns at prediction time.
+  - stores the model specs, so `x_new` DataFrames are turned into the same columns at prediction time;
+  - the formula is available as `formula_`, which is None for models built from arrays.
+
+  `ShrinkMVGPR.from_formula("cbind(y1, y2) ~ x1 + x2", data=df, **kwargs)` takes R's `cbind` response, or formulaic's `y1 + y2`, and has no `formula_mean`. `ShrinkTPR` and `ShrinkMVTPR` inherit `from_formula`.
 - **`fit(n_epochs=1000, n_latent=10, auto_stop=True, display_progress=True, optim_control=None)`** trains the model and returns `self`.
   - Calling `fit()` again continues from the last model and optimizer state. This replaces R's `cont_model`.
 - **Fitted state** uses scikit-learn-style attribute names with a trailing underscore: `model_` (best model), `loss_`, `loss_stor_`, `last_model_`, `optimizer_`.
@@ -93,10 +95,10 @@ samples = model.predict(x_new, nsamp=100)
   - `calc_pred_moments(x_new=None, nsamp=100)`;
   - `eval_pred_dens(y_eval, x_new, nsamp=100, log=False)`;
   - `lpds(y_new, x_new, nsamp=100)`;
-  - `gen_posterior_samples(nsamp=1000)`;
-  - `plot(nsamp=1000)`.
+  - `gen_posterior_samples(nsamp=1000)`, which returns a dict: `thetas` and `betas` as DataFrames, the scalar parameters as arrays of shape `(nsamp,)`, and `Omega` as `(nsamp, M, M)`;
+  - `plot(nsamp=1000, ax=None, **kwargs)`, which draws with matplotlib and returns the `Axes`.
 
-  `x_new=None` means the training data. For a model built with `from_formula`, `x_new` is a DataFrame.
+  `x_new=None` means the training data. For a model built with `from_formula`, `x_new` is a DataFrame holding the variables of both formulas, and `x_mean_new` is not used.
 - **Models built from arrays with a mean** also take the keyword `x_mean_new`. It is required whenever `x_new` is given. DataFrame columns are matched by the names seen in training. With several covariates, a 1-D array counts as one row.
 - **`eval_pred_dens` and `lpds` take exactly one test row**, as in R. `eval_pred_dens` accepts several `y_eval` values.
 - **Later models** follow the same pattern: `ShrinkTPR` (a subclass of `ShrinkGPR`), `ShrinkMVGPR` and `ShrinkMVTPR`.
@@ -166,10 +168,11 @@ The rest of this file describes R reference behavior. R names such as `shrinkGPR
 - The device defaults to CUDA when available.
 
 **Formula interface (`ShrinkGPR.from_formula`, using `formulaic`).**
-- The covariance formula builds the design matrix *without* an intercept.
+- The covariance formula builds the design matrix *without* an intercept, so a factor gets one column per level. formulaic codes factors, interactions and the column order as R's `model.matrix` does; `compare/numerics.py` checks this (`design` cases).
 - The mean formula keeps its intercept, which is renamed `Intercept`.
 - NA values are rejected, in both the array and the formula path.
-- Prediction rebuilds the design matrices from new data with the stored model specs, the equivalent of R's `terms`/`xlevels`.
+- Prediction rebuilds the design matrices from new data with the stored model specs, the equivalent of R's `terms`/`xlevels`. Unseen factor levels raise, as in R; formulaic on its own would only warn and code them as zeros.
+- Transforms use Python syntax: `np.log(x)` where R has `log(x)`.
 
 **Prediction (`GPR_class` methods, run without gradients).**
 - `calc_pred_moments(x_new, nsamp, x_mean_new)`:
@@ -181,7 +184,10 @@ The rest of this file describes R reference behavior. R names such as `shrinkGPR
 - `eval_pred_dens` takes one test row. It averages normal densities over the posterior samples with log-mean-exp.
 - `LPDS` (Python: `lpds`) is the log of `eval_pred_dens` evaluated at the observed y.
 
-**`gen_posterior_samples`** pushes `gen_batch(nsamp)` through the flows (`forward`). It returns `thetas` (columns `theta_<term>`), `sigma2`, `tau`, and with a mean also `betas` (`beta_<name>`) and `tau_mean`.
+**`gen_posterior_samples`** pushes `gen_batch(nsamp)` through the flows (`forward`) of the best model.
+- GPR and TPR: `thetas` (columns `theta_<term>`), `sigma2`, `tau`; with a mean also `betas` (`beta_<name>`) and `tau_mean`; TPR adds `nu` (latent + 2). These are the raw transformed latents, without zero-guards.
+- MVGPR and MVTPR: `thetas`, `tau`, `sigma2`, `tau_Om` and `Omega` (built from the diagonal-biased factor `L_Om`); MVTPR adds `nu`. θ, τ (tol 1e-4) and σ² (tol 1e-6) are zero-guarded.
+- `plot` draws boxplots of `thetas`, with vertical labels as R's `las = 2`.
 
 ## Deliberate deviations from the R reference
 
@@ -189,7 +195,9 @@ The rest of this file describes R reference behavior. R names such as `shrinkGPR
 - **`loss_stor_` accumulates across `fit()` calls and holds only the epochs that ran.** R's `loss_stor` covers one call and is padded with NA. Auto-stop still looks only at the current call's losses.
 - **Prediction outputs always have full shapes:** `nsamp × N_new` and `nsamp × N_new × N_new`. R's `$squeeze()` drops dimensions when `nsamp = 1` or `N_new = 1`.
 - **Errors during `fit()`.** An error before any finite loss exists is re-raised. Later errors and `KeyboardInterrupt` warn and keep the model trained so far, as in R.
-- **Random draws come from torch's RNG.** This covers TPR's chi-squared draws in `predict` (R uses `rgamma`), MVTPR's `predict` (R uses `mniw::rMT`) and everything in `sim_mvgpr`. The comparison feeds R the TPR draws; MVTPR draws match R only in distribution.
+- **Factor columns are named by formulaic,** e.g. `theta_f[a]` where R writes `theta_fa`. Both name θ by design-matrix columns (R via `model_internals$x_names` since `2580f13`), so only the format differs, and the comparison checks values only.
+- **`gen_posterior_samples` returns arrays of shape `(nsamp,)`** for scalar parameters, and DataFrames for `thetas` and `betas`, where R returns `nsamp × 1` matrices.
+- **Random draws come from torch's RNG.** This covers TPR's chi-squared draws in `predict` (R uses `rgamma`), MVTPR's `predict` (R uses `mniw::rMT`) and everything in `sim_gpr` and `sim_mvgpr`. The comparison feeds R the TPR draws; MVTPR draws match R only in distribution.
 - **MVTPR training keeps the partial model on errors.** R's `shrinkMVTPR` has its `tryCatch` commented out.
 - **Stricter MV input checks:** `a_Om`, `c_Om`, `nu_alpha` and `nu_beta` must be positive, and `y` needs at least 2 columns (R gives NaN with one).
 - **R behaviour worth knowing, ported as is.**
