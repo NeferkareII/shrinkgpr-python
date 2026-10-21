@@ -266,7 +266,9 @@ def build_cases(dtype, plugins=None):
     # (iaf and nsf_cl draw permutations with R's sample.int instead.) R fits
     # in float32 only, through its formula interface.
     if dtype == "float32":
-        n_epochs = 50
+        # Float32 rounding differences between the two runs grow after ~45
+        # epochs (with a mean), so the run is kept short
+        n_epochs = 30
         for with_mean in (False, True):
             torch.manual_seed(7)
             model = ShrinkGPR(y_gp, x_gp, x_mean_gp if with_mean else None, device="cpu")

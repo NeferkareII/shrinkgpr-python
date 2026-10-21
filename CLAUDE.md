@@ -6,7 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Python port of the R package **shrinkGPR** (https://github.com/NeferkareII/shrinkGPR, version 2.1.1). The package does variational inference for Gaussian process regression with hierarchical shrinkage priors, with the posterior approximated by normalizing flows trained in PyTorch.
 
-- **Reference commit: `011c9ca`.** The Python code should reproduce the numerics of that commit. Read the R source at `https://raw.githubusercontent.com/NeferkareII/shrinkGPR/9ff1d31/R/<file>.R`.
+- **Reference commit: `223d3e2`.** The Python code should reproduce the numerics of that commit. Read the R source at `https://raw.githubusercontent.com/NeferkareII/shrinkGPR/223d3e2/R/<file>.R`.
+  - When the reference changes, update `REFERENCE_SHA` in `compare/_rbridge.py` and the install command in `compare/README.md`, and reinstall the R package into `~/.venvs/shrinkgpr_rlib`.
+  - Also check `compare/r/handlers_*.R` for hand copies of R internals, such as `mv_elbo_parts`.
 ## Commands
 
 The project uses uv with Python 3.15 (`.python-version`). The source layout is `src/shrinkgpr`.
@@ -26,6 +28,9 @@ uv run python -m compare.benchmark              # training speed, Python vs R
   - Every newly ported function should get a case in `compare/numerics.py` and a handler in `compare/r/numerics.R`.
   - The `r`-marked tests skip themselves when R or the reference version of the package is missing.
 
+- **Exit codes after `.backward()` can't be trusted.** With torch 2.14.1+cu130 on Python 3.15, any process that calls `.backward()` crashes at interpreter shutdown (exit 139 / 0xC0000005), even after a successful run.
+  - Read pytest's summary line rather than the exit code.
+  - Run scripts with `PYTHONUNBUFFERED=1` or `python -u`, so buffered output isn't lost.
 - **The venv lives outside OneDrive.** It is at `C:\Users\knaus\.venvs\shrinkgpr`, set through the user environment variable `UV_PROJECT_ENVIRONMENT`. Don't create a `.venv` inside the repository.
 - **torch comes from the PyTorch CUDA 13.0 index** (`pytorch-cu130` in `pyproject.toml`). That index has Python 3.15 wheels and supports the RTX 5080 (Blackwell). Everything else comes from PyPI.
 
@@ -48,8 +53,14 @@ The fit depends on these R files:
 - `internal_utils.R`;
 - the univariate branches of `pred_functions.R` and `plot_functions.R`.
 
+Also ported, with the same methods as `ShrinkGPR` (`fit`, `predict`, `calc_pred_moments`, `eval_pred_dens`, `lpds`):
+- `ShrinkTPR(ShrinkGPR)` in `tpr.py` / `_tpr_module.py`;
+- `ShrinkMVGPR` in `mvgpr.py` / `_mvgpr_module.py`, and `ShrinkMVTPR(ShrinkMVGPR)` in `mvtpr.py` / `_mvtpr_module.py`. R has no linear mean for these, so there is no `x_mean`;
+- `sim_mvgpr` (port of `simMVGPR`).
+
+Their R comparison cases are plugins (`compare/cases_<model>.py`, `compare/r/handlers_<model>.R`). `tests/test_models.py` checks the behaviour shared by all four models. `from_formula`, `gen_posterior_samples` and `plot` still have to be added to every model.
+
 Deferred until later:
-- `shrinkTPR`, `shrinkMVGPR`, `shrinkMVTPR`;
 - `gen_marginal_samples` and its plots;
 - save/load.
 
@@ -178,6 +189,18 @@ The rest of this file describes R reference behavior. R names such as `shrinkGPR
 - **`loss_stor_` accumulates across `fit()` calls and holds only the epochs that ran.** R's `loss_stor` covers one call and is padded with NA. Auto-stop still looks only at the current call's losses.
 - **Prediction outputs always have full shapes:** `nsamp × N_new` and `nsamp × N_new × N_new`. R's `$squeeze()` drops dimensions when `nsamp = 1` or `N_new = 1`.
 - **Errors during `fit()`.** An error before any finite loss exists is re-raised. Later errors and `KeyboardInterrupt` warn and keep the model trained so far, as in R.
+- **Random draws come from torch's RNG.** This covers TPR's chi-squared draws in `predict` (R uses `rgamma`), MVTPR's `predict` (R uses `mniw::rMT`) and everything in `sim_mvgpr`. The comparison feeds R the TPR draws; MVTPR draws match R only in distribution.
+- **MVTPR training keeps the partial model on errors.** R's `shrinkMVTPR` has its `tryCatch` commented out.
+- **Stricter MV input checks:** `a_Om`, `c_Om`, `nu_alpha` and `nu_beta` must be positive, and `y` needs at least 2 columns (R gives NaN with one).
+- **R behaviour worth knowing, ported as is.**
+  - Training settings: the MV fits use Adam with `lr=1e-4` and clip the gradient norm to 0.5 (`ShrinkBase._adam_defaults`, `_max_grad_norm`).
+  - Degrees of freedom: in TPR and MVTPR, ν = softplus output + 2, with the Gamma(`nu_alpha`, `nu_beta`) prior on ν − 2. Prediction uses ν̂ = ν + N (Shah et al. 2014).
+  - The matrix t follows the Shah convention, V ~ IW(Ω, ν + M − 1), so each row is t with ν degrees of freedom. This holds for the likelihood `ldt_multi`, for `eval_pred_dens` and for `mniw::dMT`.
+    - `mniw::rMT` and the port's `sample_matrix_t` use the MNIW convention instead, V ~ IW(Ω, ν).
+    - So `predict` passes them ν̂ + M − 1.
+  - Zero-guards:
+    - TPR's ELBO doesn't guard θ, σ² or τ against zero.
+    - The MVGPR σ² is clamped at 1e-4 in the ELBO but at 1e-6 in prediction. MVTPR uses 1e-4 in both (`_pred_sigma2_tol`).
 - **`robust_hyperu` with b == 0:** this uses Kummer's transformation `U(a,0,z) = z·U(a+1,2,z)`. `scipy.special.hyperu` is inaccurate at b = 0 for z < 1e-3, whereas gsl, used by R, is not.
 
 ## R → Python porting pitfalls
