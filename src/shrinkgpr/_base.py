@@ -60,8 +60,10 @@ def _one_row(fixed_x, columns):
         fixed_x = pd.DataFrame({k: [v] for k, v in fixed_x.items()})
     elif isinstance(fixed_x, pd.Series):
         fixed_x = fixed_x.to_frame().T
-    if not isinstance(fixed_x, pd.DataFrame) or len(fixed_x) == 0:
+    if not isinstance(fixed_x, pd.DataFrame):
         raise TypeError("'fixed_x' must be a DataFrame, Series or dict")
+    if len(fixed_x) == 0:
+        raise ValueError("'fixed_x' has no rows")
     missing = [c for c in columns if c not in fixed_x.columns]
     if missing:
         raise ValueError(f"'fixed_x' lacks the covariates {missing}")
@@ -92,6 +94,12 @@ def load(file, device=None):
     if not isinstance(content, dict) or not isinstance(content.get("model"), ShrinkBase):
         raise TypeError("The file does not contain a model saved with save()")
     model = content["model"]
+    from . import __version__
+
+    saved = content.get("shrinkgpr_version")
+    if saved != __version__:
+        warnings.warn(f"Model was saved with shrinkgpr {saved}, this is {__version__}",
+                      stacklevel=2)
     if device is None:
         device = model.device
         if device.type == "cuda" and not torch.cuda.is_available():
@@ -355,6 +363,8 @@ class ShrinkBase:
         to_eval = [to_eval] if isinstance(to_eval, str) else list(to_eval)
         if not 1 <= len(to_eval) <= 2 or not all(isinstance(v, str) for v in to_eval):
             raise ValueError("'to_eval' must be one or two covariate names")
+        if len(set(to_eval)) != len(to_eval):
+            raise ValueError("'to_eval' must name two different covariates")
         data, valid = self._marginal_frame()
         unknown = [v for v in to_eval if v not in valid]
         if unknown:
@@ -416,7 +426,8 @@ class ShrinkBase:
             self.model_.to(device)
             for state in self.optimizer_.state.values():
                 for k, v in state.items():
-                    # Adam keeps its step counts on the CPU
+                    # Adam keeps its step counts on the CPU (optim_control can't
+                    # set capturable or fused, which would need them on the device)
                     if isinstance(v, torch.Tensor) and k != "step":
                         state[k] = v.to(device)
             self._best_state = {k: v.to(device) for k, v in self._best_state.items()}

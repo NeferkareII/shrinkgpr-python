@@ -89,6 +89,19 @@ def test_unfitted_model_and_file_objects(df, tmp_path):
     assert loaded.loss_stor_.shape == (2,)
 
 
+def test_load_warns_on_another_version(df, tmp_path):
+    path = tmp_path / "model.pt"
+    torch.save({"shrinkgpr_version": "0.0.1", "model": ShrinkGPR(df["y"], df[["x1"]],
+                                                                  device="cpu")}, path)
+    with pytest.warns(UserWarning, match="saved with shrinkgpr 0.0.1"):
+        shrinkgpr.load(path)
+
+
+def test_formula_keeps_only_used_variables(df):
+    model = build(ShrinkGPR, df)
+    assert list(model._formula.data.columns) == ["x1", "x2", "f"]
+
+
 def test_load_rejects_other_files(tmp_path):
     path = tmp_path / "other.pt"
     torch.save({"weights": torch.zeros(2)}, path)

@@ -60,7 +60,8 @@ class MarginalSamples:
         Parameters
         ----------
         probs : sequence of float
-            Quantiles; the outermost and innermost pairs form the bands.
+            Quantiles; each symmetric pair (first and last, second and
+            second-to-last, ...) forms a band.
         ax : matplotlib.axes.Axes or array of Axes, optional
             Axes to draw on, one per response; new ones by default.
         shade_color, line_color : color
@@ -85,7 +86,7 @@ class MarginalSamples:
             _, axes = plt.subplots(self.M, 1, squeeze=False, sharex=True)
             axes = axes[:, 0]
         else:
-            axes = np.atleast_1d(ax)
+            axes = np.atleast_1d(ax).ravel()
             if axes.size != self.M:
                 raise ValueError(f"'ax' must hold {self.M} Axes, one per response")
 
@@ -143,7 +144,7 @@ class MarginalSamples:
             fig = plt.figure(figsize=(5 * n, 4))
             axes = np.array([fig.add_subplot(1, n, k + 1, projection="3d") for k in range(n)])
         else:
-            axes = np.atleast_1d(ax)
+            axes = np.atleast_1d(ax).ravel()
             if axes.size != n:
                 raise ValueError(f"'ax' must hold {n} Axes, one per plotted response")
 

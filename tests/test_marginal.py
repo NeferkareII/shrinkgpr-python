@@ -136,6 +136,8 @@ def test_mean_covariates_can_be_swept(df):
 
 @pytest.mark.parametrize("kwargs, err, match", [
     ({"to_eval": ["x1", "x2", "x1"]}, ValueError, "one or two"),
+    ({"to_eval": ["x1", "x1"]}, ValueError, "two different"),
+    ({"to_eval": "x1", "fixed_x": pd.DataFrame({"x1": [], "x2": []})}, ValueError, "no rows"),
     ({"to_eval": "x9"}, ValueError, "Unknown covariates"),
     ({"to_eval": "x1", "nsamp": 0}, ValueError, "nsamp"),
     ({"to_eval": "x1", "n_eval_points": 0}, ValueError, "n_eval_points"),
@@ -169,8 +171,13 @@ def test_plot_1d(model):
     else:
         assert len(ax) == 2 and [a.get_ylabel() for a in ax] == ["y", "y2"]
     _, own = plt.subplots(ms.M, 1, squeeze=False)
-    ms.plot(ax=own[:, 0], probs=(0.1, 0.9), xlabel="X", ylabel="Y")
+    ms.plot(ax=own, probs=(0.1, 0.9), xlabel="X", ylabel="Y")  # 2-D array of Axes
     assert own[-1, 0].get_xlabel() == "X" and len(own[0, 0].collections) == 1
+    _, own = plt.subplots()
+    if ms.M == 1:
+        # Every symmetric pair of probs is a band
+        ms.plot(ax=own, probs=(0.05, 0.1, 0.25, 0.75, 0.9, 0.95))
+        assert len(own.collections) == 3
     with pytest.raises(ValueError, match="probs"):
         ms.plot_1d(probs=(0.1, 0.5, 0.9))
     with pytest.raises(ValueError, match="two covariates"):
@@ -183,6 +190,9 @@ def test_plot_2d(model, monkeypatch):
     ax = ms.plot(alpha=0.5)
     axes = np.atleast_1d(ax)
     assert len(axes) == ms.M and axes[0].name == "3d"
+    fig = plt.figure()
+    grid = np.array([[fig.add_subplot(ms.M, 1, m + 1, projection="3d")] for m in range(ms.M)])
+    assert list(np.atleast_1d(ms.plot_2d(ax=grid))) == list(grid.ravel())  # 2-D array of Axes
     assert axes[0].get_xlabel() == "x1" and axes[0].get_zlabel() == ms.response[0]
     with pytest.raises(ValueError, match="single covariate"):
         ms.plot_1d()

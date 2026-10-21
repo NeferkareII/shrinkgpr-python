@@ -84,7 +84,7 @@ class FormulaDesign:
         specs = [self._x_spec] + ([self._x_mean_spec] if self._x_mean_spec else [])
         used = set().union(*(s.variables_by_source.get("data", set()) for s in specs))
         self.variables = [str(c) for c in data.columns if c in used]
-        self.data = data.copy()
+        self.data = data[self.variables].copy()
 
     def new_x(self, data):
         """Covariance design matrix for new data."""

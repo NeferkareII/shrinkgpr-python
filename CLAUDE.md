@@ -195,7 +195,7 @@ The rest of this file describes R reference behavior. R names such as `shrinkGPR
 - The result `MarginalSamples(mean_pred, grid, to_eval, response)` has `mean_pred` of shape `nsamp × n` (1D) or `nsamp × n × n` (2D, `[i, j, k]` at `(grid1[j], grid2[k])`), with a trailing `M` axis for MV models. `grid` is an array, or a pair for 2D.
 - `MarginalSamples.plot()` dispatches to `plot_1d` (nested quantile bands, `probs` in pairs, and the median line) or `plot_2d` (a 3D surface of the median), one panel per response.
 
-**`save` / `load`.** `save` pickles the whole model object (fitted state, optimizer, formula specs) with `torch.save`. `load` maps to the CPU, then moves to `device`, which defaults to the saved device (falling back to the CPU with a warning when CUDA is missing). `load` only accepts files written by `save` and must only be used on trusted files.
+**`save` / `load`.** `save` pickles the whole model object (fitted state, optimizer, formula specs) with `torch.save`. `load` maps to the CPU, then moves to `device`, which defaults to the saved device (falling back to the CPU with a warning when CUDA is missing). `load` only accepts files written by `save`, warns if they come from another shrinkgpr version, and must only be used on trusted files.
 
 ## Deliberate deviations from the R reference
 
