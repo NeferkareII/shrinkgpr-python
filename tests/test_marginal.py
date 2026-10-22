@@ -92,12 +92,14 @@ def test_fixed_x_forms():
     model = ShrinkGPR(np.sin(model_df["x1"]), model_df, device="cpu").fit(
         n_epochs=2, display_progress=False)
     results = []
+    # The swept x1 may be left out, as in R
     for fixed in ({"x1": 0.2, "x2": 1.0}, pd.Series({"x1": 0.2, "x2": 1.0}),
-                  pd.DataFrame({"x2": [1.0, 7.0], "x1": [0.2, 0.0], "z": [0, 0]})):
+                  pd.DataFrame({"x2": [1.0, 7.0], "x1": [0.2, 0.0], "z": [0, 0]}), {"x2": 1.0}):
         torch.manual_seed(1)
         results.append(marginal(model, "x1", nsamp=2, fixed_x=fixed, n_eval_points=3).mean_pred)
     np.testing.assert_array_equal(results[0], results[1])
     np.testing.assert_array_equal(results[0], results[2])
+    np.testing.assert_array_equal(results[0], results[3])
     with pytest.raises(ValueError, match="lacks the covariates"):
         marginal(model, "x1", fixed_x={"x1": 0.2})
     with pytest.raises(TypeError, match="fixed_x"):

@@ -22,7 +22,10 @@ uv run ruff check .                             # lint
 uv run pytest -m "not r"                        # skip the comparisons against R
 uv run python -m compare.numerics               # function-by-function comparison with R
 uv run python -m compare.benchmark              # training speed, Python vs R
+uv run python docs/readme_figures.py            # rerun the README examples, regenerate docs/figures
 ```
+
+- **README.** `README.md` mirrors the R package's README. Its code blocks are copies of `docs/readme_figures.py`; when changing one, change the other and regenerate the figures.
 
 - **Comparison with R.** `compare/` checks the port against the reference R package. It is installed into the separate library `~/.venvs/shrinkgpr_rlib`; see `compare/README.md`.
   - Every newly ported function should get a case in `compare/numerics.py` and a handler in `compare/r/numerics.R`.
@@ -190,7 +193,7 @@ The rest of this file describes R reference behavior. R names such as `shrinkGPR
 - `plot` draws boxplots of `thetas`, with vertical labels as R's `las = 2`.
 
 **`gen_marginal_samples`** sweeps one or two covariates over a grid, `n_eval_points` points (default 100 for one covariate, 30 for two) over `eval_range` (default: the training range).
-- For each of the `nsamp` draws, the other covariates come from `fixed_x` (its first row) or from a random training row, and the predictive mean of one posterior draw (`calc_pred_moments(..., 1)`) is evaluated on the grid.
+- For each of the `nsamp` draws, the other covariates come from `fixed_x` (its first row; the swept covariates may be left out, as in R) or from a random training row, and the predictive mean of one posterior draw (`calc_pred_moments(..., 1)`) is evaluated on the grid.
 - `to_eval` names raw variables: the columns of `x` and `x_mean` for array models, the data variables of the formulas for formula models. They must be numeric. Covariance and mean columns with the same name are one covariate; if their values differ, the model refuses.
 - The result `MarginalSamples(mean_pred, grid, to_eval, response)` has `mean_pred` of shape `nsamp × n` (1D) or `nsamp × n × n` (2D, `[i, j, k]` at `(grid1[j], grid2[k])`), with a trailing `M` axis for MV models. `grid` is an array, or a pair for 2D.
 - `MarginalSamples.plot()` dispatches to `plot_1d` (nested quantile bands, `probs` in pairs, and the median line) or `plot_2d` (a 3D surface of the median), one panel per response.

@@ -342,8 +342,8 @@ class ShrinkBase:
         nsamp : int
             Number of draws.
         fixed_x : DataFrame, Series or dict, optional
-            Values of all covariates, used for every draw; the first row of a
-            DataFrame is used.
+            Values of the covariates that are not swept, used for every draw;
+            the first row of a DataFrame is used. Swept covariates may be left out.
         n_eval_points : int, optional
             Grid points per covariate; 100 for one covariate and 30 for two.
             For two, every draw predicts at ``n_eval_points**2`` points.
@@ -379,7 +379,8 @@ class ShrinkBase:
             n_eval_points = 100 if len(to_eval) == 1 else 30
         check_positive_int(n_eval_points=n_eval_points)
         ranges = _eval_ranges(eval_range, to_eval, data)
-        fixed = None if fixed_x is None else _one_row(fixed_x, data.columns)
+        fixed = None if fixed_x is None else _one_row(
+            fixed_x, [c for c in data.columns if c not in to_eval])
 
         grids = [np.linspace(lo, hi, n_eval_points) for lo, hi in ranges]
         if len(grids) == 1:
@@ -394,9 +395,8 @@ class ShrinkBase:
         for _ in tqdm(range(nsamp), disable=not display_progress, dynamic_ncols=True):
             row = fixed if fixed is not None else data.iloc[
                 [torch.randint(len(data), (1,)).item()]]
-            new = pd.DataFrame({c: np.repeat(row[c].to_numpy(), n_rows) for c in row.columns})
-            for v, values in sweep.items():
-                new[v] = values
+            new = pd.DataFrame({c: sweep[c] if c in sweep else np.repeat(row[c].to_numpy(), n_rows)
+                                for c in data.columns})
             draws.append(self._marginal_means(new))
         mean_pred = np.stack(draws)
         if len(grids) == 2:
