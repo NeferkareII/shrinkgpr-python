@@ -93,14 +93,46 @@ def test_flow_args_are_merged_with_defaults(data):
         ShrinkGPR(*data, flow_func=nsf_cl, flow_args={"Kk": 3}, device="cpu")
 
 
-def test_flow_options_without_default_must_be_given(data):
-    def scaled_sylvester(d, scale):
+def _flow_function(d, scale):
+    return sylvester(d)
+
+
+def _flow_keyword_only(d, *, scale):
+    return sylvester(d)
+
+
+class _FlowClass(torch.nn.Module):
+    def __init__(self, d, scale):
+        super().__init__()
+        self.inner = sylvester(d)
+
+    def forward(self, z):
+        return self.inner(z)
+
+
+@pytest.mark.parametrize("flow", [_flow_function, _flow_keyword_only, _FlowClass])
+def test_flow_options_without_default_must_be_given(data, flow):
+    with pytest.raises(TypeError, match="'flow_func' requires 'scale'"):
+        ShrinkGPR(*data, flow_func=flow, device="cpu")
+    with (pytest.warns(UserWarning, match="incorrectly named"),
+          pytest.raises(TypeError, match="'flow_func' requires 'scale'")):
+        ShrinkGPR(*data, flow_func=flow, flow_args={"scal": 2}, device="cpu")
+    model = ShrinkGPR(*data, flow_func=flow, flow_args={"scale": 2}, n_layers=2, device="cpu")
+    assert model.flow_args == {"scale": 2}
+    model.fit(n_epochs=2, display_progress=False)
+
+
+def test_flow_signature_is_checked(data):
+    def named_dim(dim, scale=1.0):
+        return sylvester(dim)
+
+    def positional_only(d, scale, /):
         return sylvester(d)
 
-    with pytest.raises(TypeError, match="'flow_func' requires 'scale'"):
-        ShrinkGPR(*data, flow_func=scaled_sylvester, device="cpu")
-    model = ShrinkGPR(*data, flow_func=scaled_sylvester, flow_args={"scale": 2}, device="cpu")
-    assert model.flow_args == {"scale": 2}
+    with pytest.raises(TypeError, match="first parameter of 'flow_func' must be named 'd'"):
+        ShrinkGPR(*data, flow_func=named_dim, device="cpu")
+    with pytest.raises(TypeError, match="positional-only parameters without a default.*'scale'"):
+        ShrinkGPR(*data, flow_func=positional_only, device="cpu")
 
 
 # Fitting

@@ -295,6 +295,23 @@ def test_predict_moments_monte_carlo():
     np.testing.assert_allclose(np.cov(draws.T), cov, atol=0.05 * np.abs(cov).max())
 
 
+def test_predict_uses_the_factor_of_omega_as_is():
+    """A small diagonal of chol(Omega) is not biased again (R did before 20a822d)."""
+    m = module64(M=2, N=7)
+    x_new = torch.tensor([[0.3, -0.1], [1.0, 0.5]], dtype=torch.float64)
+    mom = m.calc_pred_moments(x_new, 3)
+    L_Om = torch.tensor([[1.0, 0.0], [0.9, 0.05]], dtype=torch.float64).expand(3, 2, 2)
+    mom["Omega"] = L_Om @ L_Om.transpose(1, 2)
+    m.calc_pred_moments = lambda x, nsamp: mom
+
+    torch.manual_seed(1)
+    draws = m.predict(x_new, 3)
+    torch.manual_seed(1)
+    Z = torch.randn(3, 2, 2, dtype=torch.float64)
+    expected = mom["means"] + torch.linalg.cholesky(mom["K"]) @ Z @ L_Om.transpose(1, 2)
+    torch.testing.assert_close(draws, expected)
+
+
 # Fitting
 
 

@@ -25,7 +25,7 @@ def ldt_multi(L_K, L_Om, y, nu):
     """Unnormalized matrix-t log-likelihood, batched over the latent samples.
 
     ``L_K`` (B x N x N) and ``L_Om`` (B x M x M) are the Cholesky factors of
-    the row covariance ``K + sigma2 I`` and the column covariance ``Omega``;
+    the row scale matrix ``K + sigma2 I`` and the column scale matrix ``Omega``;
     ``nu`` (B) are the degrees of freedom. Returns
 
     ``-(nu+N+M-1)/2 logdet(I_M + C) - M/2 logdet(K + sigma2 I) - N/2 logdet(Omega)

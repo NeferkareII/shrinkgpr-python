@@ -29,7 +29,9 @@ class ShrinkMVGPR(ShrinkBase):
     ``Omega = S D S`` holds up to two safeguards that keep training stable:
     each free log scale is bounded smoothly to (-4, 4), and the diagonal of the
     Cholesky factor ``S L_D`` of ``Omega`` is kept above 0.03 by a softplus,
-    which changes it noticeably only below about 0.3.
+    which changes it noticeably only below about 0.3; its log-Jacobian in the
+    ELBO acts as a soft penalty on small diagonal entries. The triple gamma
+    prior is evaluated at all M scales, although only M - 1 are free.
 
     Parameters
     ----------

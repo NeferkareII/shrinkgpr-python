@@ -30,11 +30,20 @@ ADAM_DEFAULTS = {
 def _flow_defaults(flow_func):
     """Keyword arguments of a flow and their defaults, excluding ``d``.
 
-    Arguments without a default map to ``inspect.Parameter.empty``.
+    Arguments without a default map to ``inspect.Parameter.empty``. The flow
+    is called as ``flow_func(d, **flow_args)``, so its first parameter must be
+    ``d`` and every other required parameter must be passable by keyword.
     """
-    params = inspect.signature(flow_func).parameters
-    return {k: p.default for k, p in params.items()
-            if k != "d" and p.kind in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY)}
+    params = list(inspect.signature(flow_func).parameters.values())
+    if not params or params[0].name != "d":
+        raise TypeError("The first parameter of 'flow_func' must be named 'd'")
+    positional = [p.name for p in params[1:]
+                  if p.kind is p.POSITIONAL_ONLY and p.default is p.empty]
+    if positional:
+        raise TypeError("'flow_func' has positional-only parameters without a default, which "
+                        "'flow_args' can't give: " + ", ".join(f"'{k}'" for k in positional))
+    return {p.name: p.default for p in params[1:]
+            if p.kind in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY)}
 
 
 def _default_device():

@@ -67,7 +67,11 @@ $s_m$ is fixed to 1. Two safeguards keep training stable, so the
 parameterization holds only approximately at its edges: each free $\log s_m$
 is bounded smoothly to $(-4, 4)$, and the diagonal of the Cholesky factor
 $S L_D$ of $\Omega$ (with $D = L_D L_D^\top$) is kept above $0.03$ by a
-softplus, which changes it noticeably only below about $0.3$.
+softplus, which changes it noticeably only below about $0.3$. The ELBO
+includes the log-Jacobian of that softplus,
+$\sum_m \log \mathrm{sigmoid}\left(10\, (\ell_{mm} - 0.03)\right)$ for the
+diagonal entries $\ell_{mm}$ of $S L_D$, which acts as a soft penalty on small
+diagonal entries.
 
 [`ShrinkMVTPR`][shrinkgpr.ShrinkMVTPR] is the matrix Student-t counterpart,
 
@@ -145,7 +149,10 @@ s_m \mid \tau_\Omega, \lambda_{\Omega,m} \sim \mathcal{G}\left(\frac{1}{2},\, \f
 \tau_\Omega \sim F(2c_\Omega, 2a_\Omega),
 $$
 
-for $m = 1, \ldots, M$. The LKJ prior is uniform over correlation matrices for
+for $m = 1, \ldots, M$. Since the product of the scales is fixed to 1, only
+$s_1, \ldots, s_{M-1}$ are free; the density above is evaluated at all $M$
+scales and enters the objective as an unnormalized density on the free ones.
+The LKJ prior is uniform over correlation matrices for
 $\eta = 1$ and concentrates near the identity as $\eta$ grows.
 
 All densities enter the objective without their normalizing constants.
