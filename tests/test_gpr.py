@@ -93,6 +93,16 @@ def test_flow_args_are_merged_with_defaults(data):
         ShrinkGPR(*data, flow_func=nsf_cl, flow_args={"Kk": 3}, device="cpu")
 
 
+def test_flow_options_without_default_must_be_given(data):
+    def scaled_sylvester(d, scale):
+        return sylvester(d)
+
+    with pytest.raises(TypeError, match="'flow_func' requires 'scale'"):
+        ShrinkGPR(*data, flow_func=scaled_sylvester, device="cpu")
+    model = ShrinkGPR(*data, flow_func=scaled_sylvester, flow_args={"scale": 2}, device="cpu")
+    assert model.flow_args == {"scale": 2}
+
+
 # Fitting
 
 

@@ -168,7 +168,8 @@ other covariates or sampling them from the training data. Here, we sweep over
 the first covariate while holding the other two at zero:
 
 ```python
-marginal_samples = model.gen_marginal_samples("x.1", fixed_x={"x.2": 0, "x.3": 0})
+marginal_samples = model.gen_marginal_samples("x.1", fixed_x={"x.2": 0, "x.3": 0},
+                                              display_progress=False)
 ```
 
 The result has a `plot` method, which visualizes the marginal effect of the
@@ -254,7 +255,8 @@ univariate case. Here, we show the marginal effect of the first covariate on
 each response, while holding the other two covariates at zero:
 
 ```python
-marg = model_mv.gen_marginal_samples("x.1", fixed_x={"x.2": 0, "x.3": 0})
+marg = model_mv.gen_marginal_samples("x.1", fixed_x={"x.2": 0, "x.3": 0},
+                                     display_progress=False)
 marg.plot()
 ```
 
@@ -283,4 +285,5 @@ function by function. The interface follows Python conventions: models are
 constructed and then trained with `fit`, the fitted state lives in attributes
 such as `loss_stor_`, and prediction and posterior functions are methods.
 Plots use matplotlib, and saved models are not interchangeable between R and
-Python. `CLAUDE.md` lists all deliberate deviations.
+Python. [Differences from R](https://neferkareii.github.io/shrinkgpr-python/differences/)
+in the documentation lists all deliberate deviations.

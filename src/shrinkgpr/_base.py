@@ -28,7 +28,10 @@ ADAM_DEFAULTS = {
 
 
 def _flow_defaults(flow_func):
-    """Keyword arguments of a flow and their defaults, excluding ``d``."""
+    """Keyword arguments of a flow and their defaults, excluding ``d``.
+
+    Arguments without a default map to ``inspect.Parameter.empty``.
+    """
     params = inspect.signature(flow_func).parameters
     return {k: p.default for k, p in params.items()
             if k != "d" and p.kind in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY)}
@@ -112,7 +115,7 @@ def load(file, device=None):
 class ShrinkBase:
     """Base of the user-facing models.
 
-    Subclasses validate their data, call :meth:`_setup` and assign the internal
+    Subclasses validate their data, call ``_setup`` and assign the internal
     ``nn.Module`` to ``self._module``. That module must provide
     ``gen_batch(n)``, ``forward(z) -> (zk, log_det_J)`` and
     ``elbo(zk, log_det_J)``, and keep its training covariates in the buffer
@@ -142,6 +145,10 @@ class ShrinkBase:
         self.n_layers = n_layers
         self.flow_func = flow_func
         self.flow_args = merge_args(_flow_defaults(flow_func), flow_args, "flow_args")
+        missing = [k for k, v in self.flow_args.items() if v is inspect.Parameter.empty]
+        if missing:
+            raise TypeError("'flow_func' requires " + ", ".join(f"'{k}'" for k in missing)
+                            + ", which 'flow_args' does not give")
 
     @property
     def is_fitted(self):

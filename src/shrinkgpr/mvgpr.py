@@ -26,6 +26,11 @@ class ShrinkMVGPR(ShrinkBase):
     (whose product is 1). The posterior is approximated by normalizing flows
     trained through variational inference. There is no linear mean.
 
+    ``Omega = S D S`` holds up to two safeguards that keep training stable:
+    each free log scale is bounded smoothly to (-4, 4), and the diagonal of the
+    Cholesky factor ``S L_D`` of ``Omega`` is kept above 0.03 by a softplus,
+    which changes it noticeably only below about 0.3.
+
     Parameters
     ----------
     y : array-like of shape (N, M)
@@ -58,7 +63,8 @@ class ShrinkMVGPR(ShrinkBase):
     model_ : MVGPRModule
         Model with the lowest loss seen during training.
     loss_ : float
-        That lowest loss (negative ELBO).
+        That lowest loss: the negative ELBO up to an additive constant, which
+        depends on the data and the prior hyperparameters.
     loss_stor_ : numpy.ndarray
         Loss of every epoch, across all calls to [`fit`][shrinkgpr.ShrinkMVGPR.fit].
     last_model_ : MVGPRModule

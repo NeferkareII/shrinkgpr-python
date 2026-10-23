@@ -69,7 +69,8 @@ class ShrinkGPR(ShrinkBase):
     model_ : GPRModule
         Model with the lowest loss seen during training.
     loss_ : float
-        That lowest loss (negative ELBO).
+        That lowest loss: the negative ELBO up to an additive constant, which
+        depends on the data and the prior hyperparameters.
     loss_stor_ : numpy.ndarray
         Loss of every epoch, across all calls to [`fit`][shrinkgpr.ShrinkGPR.fit].
     last_model_ : GPRModule

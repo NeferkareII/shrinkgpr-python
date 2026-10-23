@@ -65,7 +65,7 @@ def sim_mvgpr(N=200, M=2, d=3, sigma2=0.1, tau=2, kernel_func=kernel_se, perc_sp
     sigma2 : float
         Noise variance.
     tau : float
-        Global scale of the kernel.
+        Global shrinkage parameter; the kernel's output variance is ``1/tau``.
     kernel_func : callable
         Kernel function.
     perc_spars : float

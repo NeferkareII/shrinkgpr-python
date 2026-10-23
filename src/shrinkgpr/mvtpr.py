@@ -53,7 +53,10 @@ class ShrinkMVTPR(ShrinkMVGPR):
 
         For each of ``nsamp`` posterior draws, the predictive distribution at
         ``x_new`` is matrix-variate t with row scale ``K``, column scale
-        ``Omega`` and ``nu`` degrees of freedom.
+        ``Omega`` and ``nu`` degrees of freedom, in the convention of Shah et
+        al. (2014): ``Y | V ~ MN(means, K, V)`` with
+        ``V ~ InvWishart(Omega, nu + M - 1)``. ``Omega`` is therefore a scale
+        matrix; the covariance of ``vec(Y)`` is ``Omega ⊗ K / (nu - 2)``.
 
         Parameters
         ----------

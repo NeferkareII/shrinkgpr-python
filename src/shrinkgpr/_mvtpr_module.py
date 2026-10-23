@@ -2,7 +2,7 @@
 
 The N x M response matrix is matrix-variate t,
 ``Y ~ MT(nu, 0, K + sigma2 I, Omega)``. The latent layout is that of
-:class:`~shrinkgpr._mvgpr_module.MVGPRModule` with one trailing positive
+``MVGPRModule`` with one trailing positive
 column for the degrees of freedom:
 ``[corr (P), log-scales (M-1), theta_1..theta_p, tau, tau_Om, sigma2, nu - 2]``,
 so ``d_latent = P + M - 1 + p + 4`` with ``P = M(M-1)/2``. As in the
@@ -144,7 +144,7 @@ class MVTPRModule(MVGPRModule):
 
         Like R, which calls ``mniw::rMT`` with ``nu + M - 1``: the column
         covariance of each draw is ``InvWishart(Omega, nu + M - 1)``, so the
-        draws follow the density of :meth:`eval_pred_dens`.
+        draws follow the density of ``eval_pred_dens``.
         """
         moments = self.calc_pred_moments(x_new, nsamp)
         return sample_matrix_t(moments["means"], moments["K"], moments["Omega"],

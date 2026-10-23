@@ -31,7 +31,7 @@ def sim_gpr(N=200, d=3, d_mean=0, sigma2=0.1, tau=2, kernel_func=kernel_se, perc
     sigma2 : float
         Noise variance.
     tau : float
-        Global scale of the kernel.
+        Global shrinkage parameter; the kernel's output variance is ``1/tau``.
     kernel_func : callable
         Kernel function.
     perc_spars : float

@@ -7,8 +7,9 @@ is given. No input checks are performed.
 
 All kernels work on the theta-scaled distance
 $r^2 = \sum_{j=1}^d \theta_j (x_j - x'_j)^2$, where $\theta_j \ge 0$ are
-the inverse squared length scales and $\tau > 0$ is the output scale. The
-Matérn kernels use $D = \sqrt{r^2 + 10^{-4}}$, which keeps the gradient finite
+the inverse squared length scales. $\tau > 0$ is the global shrinkage
+parameter of the prior on the $\theta_j$; the kernels' output variance is
+$1/\tau$. The Matérn kernels use $D = \sqrt{r^2 + 10^{-4}}$, which keeps the gradient finite
 at $r = 0$.
 
 A custom kernel passed as ``kernel_func`` must follow the same signature,
@@ -22,7 +23,12 @@ import torch
 
 
 def sqdist(x, thetas, x_star=None):
-    r"""Squared distances $r^2$ between the theta-scaled inputs, n_latent x N x N (or N_new x N)."""
+    r"""Squared distances $r^2$ between the theta-scaled inputs.
+
+    Note the argument order, ``(x, thetas, x_star)``, which differs from the
+    kernels'. Returns n_latent x N x N, or n_latent x N_new x N when ``x_star``
+    is given.
+    """
     scale = torch.sqrt(thetas.unsqueeze(1))
     x_scaled = x.unsqueeze(0) * scale
     if x_star is None:

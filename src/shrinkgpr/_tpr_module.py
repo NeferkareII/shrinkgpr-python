@@ -51,7 +51,7 @@ class TPRModule(GPRModule):
     is ``nu - 2 ~ Gamma(nu_alpha, nu_beta)`` (shape, rate).
 
     As in R, the ELBO does not guard the parameters away from zero with
-    :func:`res_protector`; prediction guards every column with ``tol=1e-6``.
+    ``res_protector``; prediction guards every column with ``tol=1e-6``.
     """
 
     n_extra = 1

@@ -23,9 +23,12 @@ $$
 k(x, x';\, \theta, \tau) = \frac{1}{\tau} \exp\left(-\frac{1}{2} \sum_{j=1}^d \theta_j (x_j - x'_j)^2\right),
 $$
 
-where $\theta_j \ge 0$ are inverse squared length scales and $\tau > 0$ is the
-output scale. A covariate whose $\theta_j$ is shrunk to zero has no influence
-on the covariance. The other [kernels](#kernels) use the same parameters.
+where $\theta_j \ge 0$ are inverse squared length scales, and the output
+variance is $1/\tau$. A covariate whose $\theta_j$ is shrunk to zero has no
+influence on the covariance. The other [kernels](#kernels) use the same
+parameters. $\tau$ is also the global shrinkage parameter of the
+[prior](#priors) on the $\theta_j$, so the two roles are tied: a small $\tau$
+means both strong shrinkage of the $\theta_j$ and a large output variance.
 
 The mean is zero by default. With covariates for a linear mean (`x_mean`, or
 `formula_mean` in [`from_formula`][shrinkgpr.ShrinkGPR.from_formula]), it
@@ -42,7 +45,9 @@ $$
 Y \sim t_N\left(\nu,\, \mu,\, K(\theta, \tau) + \sigma^2 I\right).
 $$
 
-The heavier tails make the model more robust to outliers.
+Following Shah et al. (2014), the third argument is the covariance of $Y$,
+not the scale matrix of the usual parameterization; the scale matrix is
+$\frac{\nu - 2}{\nu} (K + \sigma^2 I)$. The heavier tails make the model more robust to outliers.
 
 ## Multivariate responses
 
@@ -58,7 +63,11 @@ $$
 $\Omega$ is the $M \times M$ covariance between the responses, parameterized as
 $\Omega = S D S$ with a correlation matrix $D$ and
 $S = \mathrm{diag}(s_1, \ldots, s_M)$. For identifiability, the product of the
-$s_m$ is fixed to 1.
+$s_m$ is fixed to 1. Two safeguards keep training stable, so the
+parameterization holds only approximately at its edges: each free $\log s_m$
+is bounded smoothly to $(-4, 4)$, and the diagonal of the Cholesky factor
+$S L_D$ of $\Omega$ (with $D = L_D L_D^\top$) is kept above $0.03$ by a
+softplus, which changes it noticeably only below about $0.3$.
 
 [`ShrinkMVTPR`][shrinkgpr.ShrinkMVTPR] is the matrix Student-t counterpart,
 
@@ -66,34 +75,63 @@ $$
 Y \sim \mathcal{MT}_{N,M}\left(\nu,\; 0,\; K(\theta, \tau) + \sigma^2 I_N,\; \Omega\right),
 $$
 
-in the convention of Shah et al. (2014), where each row of $Y$ is multivariate
-t with $\nu$ degrees of freedom.
+in the convention of Shah et al. (2014): $Y \mid V \sim
+\mathcal{MN}_{N,M}(0, K + \sigma^2 I_N, V)$ with
+$V \sim \mathcal{IW}(\Omega, \nu + M - 1)$, so each row of $Y$ is multivariate t
+with $\nu$ degrees of freedom. Here $\Omega$ is a scale matrix rather than the
+covariance:
+
+$$
+\mathrm{Cov}(\mathrm{vec}(Y)) = \frac{1}{\nu - 2}\, \Omega \otimes (K + \sigma^2 I_N).
+$$
 
 The multivariate models have no linear mean.
 
 ## Priors
 
-The triple gamma (TG) prior (Cadonna et al. 2020) shrinks the inverse length
-scales of irrelevant covariates towards zero:
+The triple gamma prior (Cadonna et al. 2020) shrinks the inverse length
+scales of irrelevant covariates towards zero. It is a gamma distribution
+mixed over local scales $\lambda_j$ with an F distribution:
 
 $$
-\theta_j \mid \tau \sim \mathrm{TG}(a, c, \tau), \quad j = 1, \ldots, d, \qquad
+\theta_j \mid \tau, \lambda_j \sim \mathcal{G}\left(\frac{1}{2},\, \frac{1}{2 \tau \lambda_j}\right), \qquad
+\lambda_j \sim F(2a, 2c), \qquad j = 1, \ldots, d,
+$$
+
+$$
 \tau \sim F(2c, 2a), \qquad
 \sigma^2 \sim \mathrm{Exp}(\sigma^2_\mathrm{rate}).
 $$
 
-$a$ controls the spike at zero and $c$ the tail decay. With a linear mean, the
-coefficients get a normal-gamma-gamma (NGG) prior:
+Gamma distributions $\mathcal{G}(\cdot, \cdot)$ are given by shape and rate,
+and the exponential by its rate. $a$ controls the spike at zero and $c$ the
+tail decay. The local scales are integrated out analytically, so the model
+works with the marginal density
 
 $$
-\beta_k \mid \tau_\mu \sim \mathrm{NGG}(a_\mu, c_\mu, \tau_\mu), \qquad
-\tau_\mu \sim F(2c_\mu, 2a_\mu).
+p(\theta_j \mid \tau) \propto \tau^{-1/2}\, \theta_j^{-1/2}\,
+U\!\left(c + \tfrac{1}{2},\, \tfrac{3}{2} - a,\, \frac{a\, \theta_j}{2 c \tau}\right),
 $$
+
+where $U$ is the confluent hypergeometric function of the second kind.
+
+With a linear mean, the coefficients get the same prior in its normal form, a
+normal-gamma-gamma prior:
+
+$$
+\beta_k \mid \tau_\mu, \lambda_{\mu,k} \sim \mathcal{N}\left(0,\, \tau_\mu \lambda_{\mu,k}\right), \qquad
+\lambda_{\mu,k} \sim F(2a_\mu, 2c_\mu), \qquad
+\tau_\mu \sim F(2c_\mu, 2a_\mu),
+$$
+
+with marginal density
+$p(\beta_k \mid \tau_\mu) \propto \tau_\mu^{-1/2}\,
+U\!\left(c_\mu + \tfrac{1}{2},\, \tfrac{3}{2} - a_\mu,\, \frac{a_\mu \beta_k^2}{2 c_\mu \tau_\mu}\right)$.
 
 The Student-t models add a prior on the degrees of freedom,
 
 $$
-\nu - 2 \sim \mathrm{Gamma}(\nu_\alpha, \nu_\beta),
+\nu - 2 \sim \mathcal{G}(\nu_\alpha, \nu_\beta),
 $$
 
 where the shift by 2 keeps $\nu > 2$, so the process variance is finite.
@@ -102,12 +140,15 @@ The multivariate models add priors on $\Omega = S D S$:
 
 $$
 D \sim \mathrm{LKJ}(\eta), \qquad
-s_m \mid \tau_\Omega \sim \mathrm{TG}(a_\Omega, c_\Omega, \tau_\Omega), \quad m = 1, \ldots, M, \qquad
-\tau_\Omega \sim F(2c_\Omega, 2a_\Omega).
+s_m \mid \tau_\Omega, \lambda_{\Omega,m} \sim \mathcal{G}\left(\frac{1}{2},\, \frac{1}{2 \tau_\Omega \lambda_{\Omega,m}}\right), \qquad
+\lambda_{\Omega,m} \sim F(2a_\Omega, 2c_\Omega), \qquad
+\tau_\Omega \sim F(2c_\Omega, 2a_\Omega),
 $$
 
-The LKJ prior is uniform over correlation matrices for $\eta = 1$ and
-concentrates near the identity as $\eta$ grows.
+for $m = 1, \ldots, M$. The LKJ prior is uniform over correlation matrices for
+$\eta = 1$ and concentrates near the identity as $\eta$ grows.
+
+All densities enter the objective without their normalizing constants.
 
 | Python argument | Symbol |
 |---|---|
@@ -123,7 +164,11 @@ concentrates near the identity as $\eta$ grows.
 The posterior of all parameters is approximated by a normalizing flow
 $q_\phi$: base samples $z \sim \mathcal{N}(0, I)$ pass through a stack of
 `n_layers` invertible [flows](#flows), and a softplus transform maps the
-positive parameters to $(0, \infty)$. [`fit`][shrinkgpr.ShrinkGPR.fit] trains
+positive parameters to $(0, \infty)$. The multivariate models start from a
+shifted and scaled base distribution instead: the components for $\Omega$ are
+scaled by $0.2/\sqrt{q}$, with $q$ the number of them, so $\Omega$ starts near
+the identity, and those for $\theta$ are shifted by $-2$, so the $\theta_j$
+start small. [`fit`][shrinkgpr.ShrinkGPR.fit] trains
 the flow parameters $\phi$ with Adam to maximize the evidence lower bound
 (ELBO),
 
@@ -131,7 +176,11 @@ $$
 \mathrm{ELBO}(\phi) = \mathbb{E}_{q_\phi}\left[\log p(Y \mid \vartheta) + \log p(\vartheta) - \log q_\phi(\vartheta)\right],
 $$
 
-estimated in each epoch from `n_latent` draws. With `auto_stop=True`, training
+estimated in each epoch from `n_latent` draws. The loss, stored in
+`loss_stor_`, is the negative ELBO up to an additive constant: the dropped
+normalizing constants depend on the data and the prior hyperparameters, so
+losses are only comparable between fits of the same model to the same data
+with the same hyperparameters. With `auto_stop=True`, training
 stops early once the loss shows no significant trend over the last 100
 epochs. The model with the lowest loss is kept as `model_`.
 
@@ -165,12 +214,17 @@ def kernel(thetas, tau, x, x_star=None):
   `(n_latent, N_new, N)` otherwise.
 - The matrices must be positive semi-definite. Use torch operations only, so
   the kernel runs on the CPU and the GPU and gradients flow through it.
+- To [`save`][shrinkgpr.ShrinkGPR.save] the model, the kernel must be
+  picklable: define it with `def` at the top level of a module, not as a
+  lambda. A function defined in a script or notebook can only be loaded where
+  it is defined again.
 
 [`sqdist`][shrinkgpr.kernels.sqdist] computes the theta-scaled squared
 distances, as the built-in kernels do. For example, a rational quadratic
 kernel:
 
 ```python
+from shrinkgpr import ShrinkGPR
 from shrinkgpr.kernels import sqdist
 
 def kernel_rq(thetas, tau, x, x_star=None, alpha=2.0):
@@ -199,6 +253,12 @@ A flow is a `torch.nn.Module` that the model builds once per layer as
 `(zk, log_diag_j)`: the transformed samples, of the same shape, and the log
 absolute determinant of the Jacobian, of shape `(n_latent,)`. See
 [`Sylvester`][shrinkgpr.flows.Sylvester] for an example.
+
+- The first parameter of `flow_func` must be named `d`.
+- Options must be explicit keyword parameters. The model reads them from the
+  signature, so options taken through `**kwargs` are dropped with a warning.
+- An option without a default must be given in `flow_args`.
+- As for kernels, the flow class must be picklable to save the model.
 
 ## References
 
