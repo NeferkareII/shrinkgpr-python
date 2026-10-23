@@ -3,6 +3,10 @@ site_description: >-
   Gaussian and Student-t process regression with hierarchical shrinkage priors,
   fitted by variational inference with normalizing flows in PyTorch
 copyright: Peter Knaus
+site_url: https://neferkareii.github.io/shrinkgpr-python/
+repo_url: https://github.com/NeferkareII/shrinkgpr-python
+repo_name: NeferkareII/shrinkgpr-python
+edit_uri: edit/main/docs/
 
 theme:
   name: material

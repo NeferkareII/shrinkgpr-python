@@ -16,6 +16,11 @@ dependencies = [
     "matplotlib",
 ]
 
+[project.urls]
+Documentation = "https://neferkareii.github.io/shrinkgpr-python/"
+Repository = "https://github.com/NeferkareII/shrinkgpr-python"
+"R package" = "https://github.com/NeferkareII/shrinkGPR"
+
 [dependency-groups]
 dev = [
     "pytest",

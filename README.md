@@ -8,6 +8,9 @@ approximated by normalizing flows. It is designed with GPU acceleration via
 CUDA in mind and, while it works with the CPU version of PyTorch, it may be
 slow that way, especially for larger models.
 
+The full documentation, including the model description and the API
+reference, is at <https://neferkareii.github.io/shrinkgpr-python/>.
+
 The examples below simulate data, fit uni- and multivariate models with
 shrinkage priors on the kernel parameters, check convergence, draw posterior
 samples and make predictions. They are not exhaustive; every class and method
@@ -23,7 +26,7 @@ guide](https://pytorch.org/get-started/locally/); a CUDA build is recommended),
 then the package:
 
 ```bash
-pip install git+https://github.com/NeferkareII/shrinkGPR_py
+pip install git+https://github.com/NeferkareII/shrinkgpr-python
 ```
 
 ```python
