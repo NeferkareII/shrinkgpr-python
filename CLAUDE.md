@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Python port of the R package **shrinkGPR** (https://github.com/NeferkareII/shrinkGPR, version 2.1.1). The package does variational inference for Gaussian process regression with hierarchical shrinkage priors, with the posterior approximated by normalizing flows trained in PyTorch.
 
-- **Reference commit: `bb488f5`.** The Python code should reproduce the numerics of that commit. Read the R source at `https://raw.githubusercontent.com/NeferkareII/shrinkGPR/bb488f5/R/<file>.R`.
+- **Reference commit: `20a822d`.** The Python code should reproduce the numerics of that commit. Read the R source at `https://raw.githubusercontent.com/NeferkareII/shrinkGPR/20a822d/R/<file>.R`.
   - When the reference changes, update `REFERENCE_SHA` in `compare/_rbridge.py` and the install command in `compare/README.md`, and reinstall the R package into `~/.venvs/shrinkgpr_rlib`.
   - Also check `compare/r/handlers_*.R` for hand copies of R internals, such as `mv_elbo_parts`.
 ## Commands

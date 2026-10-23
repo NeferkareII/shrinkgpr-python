@@ -81,10 +81,12 @@ mv_elbo_parts <- function(m, zk_pos, model) {
     likelihood <- m$ldnorm(K, L_Om2, sigma_zk)$mean()
   }
 
-  logdet_D <- 2 * torch_sum(torch_log(torch_diagonal(D_chol_zk$L, dim1 = 2, dim2 = 3)), dim = 2)
+  diag_LD <- torch_diagonal(D_chol_zk$L, dim1 = 2, dim2 = 3)
+  lkj_w <- torch_tensor(as.numeric(m$M - seq_len(m$M)), device = diag_LD$device)
+  lkj_term <- torch_sum((lkj_w + 2 * (m$prior_eta - 1)) * torch_log(diag_LD), dim = 2)
   prior <- m$ltg(theta_zk, m$prior_a, m$prior_c, tau_zk)$sum(dim = 2)$mean() +
     m$ldf(tau_zk, 2 * m$prior_c, 2 * m$prior_a)$mean() +
-    ((m$prior_eta - 1) * logdet_D)$mean() +
+    lkj_term$mean() +
     m$ltg(S_diag, m$prior_a_Om, m$prior_c_Om, tau_Om_zk)$sum(dim = 2)$mean() +
     m$ldf(tau_Om_zk, 2 * m$prior_c_Om, 2 * m$prior_a_Om)$mean() +
     m$lexp(sigma_zk, m$prior_rate)$mean()

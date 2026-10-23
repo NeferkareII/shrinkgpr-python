@@ -99,6 +99,19 @@ def make_corr_chol(omega_uncons, M):
     return L, logJ_tanh + logJ_sb
 
 
+def lkj_chol_logpdf(L, eta):
+    """Unnormalized LKJ(eta) log density of a correlation matrix, on its Cholesky factor.
+
+    Stan's ``lkj_corr_cholesky``: ``sum_k (M - k + 2(eta - 1)) log L_kk`` with
+    1-based ``k``, where the ``M - k`` part is the Jacobian of ``D = L L'``.
+    ``L`` is B x M x M; returns B values.
+    """
+    diag = torch.diagonal(L, dim1=-2, dim2=-1)
+    M = diag.shape[-1]
+    weights = torch.arange(M - 1, -1, -1, dtype=diag.dtype, device=diag.device)
+    return ((weights + 2 * (eta - 1)) * torch.log(diag)).sum(dim=-1)
+
+
 def bias_diag(L):
     """Replace the diagonal of ``L`` by ``EPS_DIAG + softplus(diag - EPS_DIAG)``.
 
@@ -227,8 +240,7 @@ class MVGPRModule(nn.Module):
 
     def log_prior(self, params, omega):
         thetas, tau, tau_Om = params["thetas"], params["tau"], params["tau_Om"]
-        logdet_D = 2 * torch.log(torch.diagonal(omega["L_D"], dim1=-2, dim2=-1)).sum(dim=1)
-        lkj_term = (self.prior_eta - 1) * logdet_D
+        lkj_term = lkj_chol_logpdf(omega["L_D"], self.prior_eta)
         return (self.ltg(thetas, self.prior_a, self.prior_c, tau).sum(dim=1).mean()
                 + self.ldf(tau, 2 * self.prior_c, 2 * self.prior_a).mean()
                 + lkj_term.mean()
@@ -301,8 +313,8 @@ class MVGPRModule(nn.Module):
         """Draws from the posterior predictive distribution (nsamp x N_new x M)."""
         moments = self.calc_pred_moments(x_new, nsamp)
         L_S = robust_chol(moments["K"])
-        # As in R, the diagonal of the factor of Omega is biased a second time
-        L_Om, _ = bias_diag(robust_chol(moments["Omega"]))
+        # Omega is already built from the diagonal-biased factor
+        L_Om = robust_chol(moments["Omega"])
         Z = torch.randn(nsamp, x_new.shape[0], self.M, device=x_new.device, dtype=x_new.dtype)
         return moments["means"] + L_S @ Z @ L_Om.transpose(1, 2)
 

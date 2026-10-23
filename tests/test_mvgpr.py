@@ -6,7 +6,13 @@ import pytest
 import torch
 from scipy import special, stats
 
-from shrinkgpr._mvgpr_module import MVGPRModule, bias_diag, ldnorm_multi, make_corr_chol
+from shrinkgpr._mvgpr_module import (
+    MVGPRModule,
+    bias_diag,
+    ldnorm_multi,
+    lkj_chol_logpdf,
+    make_corr_chol,
+)
 from shrinkgpr.flows import iaf, nsf_cl, sylvester
 from shrinkgpr.kernels import kernel_matern_32, kernel_se
 from shrinkgpr.mvgpr import ShrinkMVGPR
@@ -135,6 +141,27 @@ def test_bias_diag():
     assert L2[0, 1, 0] == 0.3 and L2[0, 0, 1] == 0
 
 
+@pytest.mark.parametrize("M", [2, 3, 5])
+@pytest.mark.parametrize("eta", [1.0, 4.0])
+def test_lkj_chol_logpdf_is_lkj_on_D(M, eta):
+    """The density on L is (eta - 1) log det D plus log|dD/dL| over the free entries."""
+    torch.manual_seed(M)
+    u = torch.randn(3, M * (M - 1) // 2, dtype=torch.float64)
+    L, _ = make_corr_chol(u, M)
+    rows, cols = torch.tril_indices(M, M, offset=-1)
+
+    def corr_lower(free):
+        L_off = torch.zeros(M, M, dtype=free.dtype).index_put((rows, cols), free)
+        L_full = L_off + torch.diag(torch.sqrt(1 - (L_off ** 2).sum(dim=1)))
+        return (L_full @ L_full.T)[rows, cols]
+
+    for b in range(3):
+        jac = torch.autograd.functional.jacobian(corr_lower, L[b][rows, cols])
+        log_det_D = 2 * torch.log(torch.diagonal(L[b])).sum()
+        expected = (eta - 1) * log_det_D + torch.linalg.slogdet(jac).logabsdet
+        torch.testing.assert_close(lkj_chol_logpdf(L[b:b + 1], eta)[0], expected)
+
+
 def test_ldnorm_multi_matches_matrix_normal():
     rng = np.random.default_rng(1)
     N, M = 6, 3
@@ -171,8 +198,11 @@ def test_log_prior_by_hand():
     th, tau, tau_om = (params[k].detach().numpy() for k in ("thetas", "tau", "tau_Om"))
     s, s2 = omega["S_diag"].detach().numpy(), params["sigma2"].detach().numpy()
     corr = (omega["L_D"] @ omega["L_D"].transpose(1, 2)).detach().numpy()
+    # Jacobian of D = L L': sum_k (M - k) log L_kk, 1-based k
+    diag_L = np.diagonal(omega["L_D"].detach().numpy(), axis1=1, axis2=2)
+    jac_D = (np.log(diag_L) * np.arange(m.M - 1, -1, -1)).sum(1)
     expected = (ltg(th, 0.5, 0.5, tau).sum(1).mean() + ldf(tau, 1, 1).mean()
-                + (4 - 1) * np.linalg.slogdet(corr)[1].mean()
+                + ((4 - 1) * np.linalg.slogdet(corr)[1] + jac_D).mean()
                 + ltg(s, 0.5, 0.5, tau_om).sum(1).mean() + ldf(tau_om, 1, 1).mean()
                 + (np.log(10) - 10 * s2).mean())
     assert prior == pytest.approx(expected, rel=1e-10)
@@ -259,10 +289,7 @@ def test_predict_moments_monte_carlo():
     m.gen_batch = lambda n: z[:n]
     mom = m.calc_pred_moments(x_new, 1)
     draws = m.predict(x_new, 40000).reshape(40000, -1).numpy()
-    from shrinkgpr._utils import robust_chol
-    L_Om, _ = bias_diag(robust_chol(mom["Omega"]))
-    Om_used = (L_Om @ L_Om.transpose(1, 2))[0].numpy()  # R biases the factor again
-    cov = np.kron(mom["K"][0].numpy(), Om_used)
+    cov = np.kron(mom["K"][0].numpy(), mom["Omega"][0].numpy())
     np.testing.assert_allclose(draws.mean(0), mom["means"][0].numpy().ravel(),
                                atol=4 * np.sqrt(cov.diagonal().max() / 40000))
     np.testing.assert_allclose(np.cov(draws.T), cov, atol=0.05 * np.abs(cov).max())
