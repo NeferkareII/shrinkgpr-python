@@ -54,7 +54,7 @@ class ShrinkGPR(ShrinkBase):
     sigma2_rate : float
         Rate of the exponential prior on the noise variance.
     kernel_func : callable
-        Kernel function, e.g. :func:`shrinkgpr.kernels.kernel_se`.
+        Kernel function, e.g. [`kernel_se`][shrinkgpr.kernels.kernel_se].
     n_layers : int
         Number of flow layers.
     flow_func : callable
@@ -71,13 +71,13 @@ class ShrinkGPR(ShrinkBase):
     loss_ : float
         That lowest loss (negative ELBO).
     loss_stor_ : numpy.ndarray
-        Loss of every epoch, across all calls to :meth:`fit`.
+        Loss of every epoch, across all calls to [`fit`][shrinkgpr.ShrinkGPR.fit].
     last_model_ : GPRModule
         Model after the last epoch; training continues from it.
     optimizer_ : torch.optim.Adam
         Optimizer, with its state kept for continued training.
     stop_reason_ : str
-        How the last call to :meth:`fit` ended: ``"max_iterations"``,
+        How the last call to [`fit`][shrinkgpr.ShrinkGPR.fit] ended: ``"max_iterations"``,
         ``"auto_stop"``, ``"interrupted"`` or ``"error"``.
     """
 
@@ -141,6 +141,8 @@ class ShrinkGPR(ShrinkBase):
         **kwargs
             Further arguments of the constructor.
 
+        Notes
+        -----
         Prediction methods then take ``x_new`` as a DataFrame and build both
         design matrices from it.
         """
@@ -226,7 +228,7 @@ class ShrinkGPR(ShrinkBase):
     def predict(self, x_new=None, nsamp=100, *, x_mean_new=None):
         """Draws from the posterior predictive distribution.
 
-        Parameters are as for :meth:`calc_pred_moments`.
+        Parameters are as for [`calc_pred_moments`][shrinkgpr.ShrinkGPR.calc_pred_moments].
 
         Returns
         -------

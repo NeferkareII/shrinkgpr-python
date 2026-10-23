@@ -21,6 +21,13 @@ dev = [
     "pytest",
     "ruff",
 ]
+docs = [
+    "mkdocs>=1.6,<2",
+    "mkdocs-include-markdown-plugin>=7.3.0",
+    "mkdocs-material>=9.7.7",
+    "mkdocstrings[python]>=1.0.6",
+    "ruff",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -33,6 +40,11 @@ packages = ["src/shrinkgpr"]
 # Python 3.15 wheels and supports Blackwell GPUs); everything else from PyPI.
 [tool.uv.sources]
 torch = [{ index = "pytorch-cu130", marker = "sys_platform == 'win32' or sys_platform == 'linux'" }]
+
+# PyYAML (needed by the docs) has no wheels for Python 3.15 yet; build it
+# without its C extension, so no compiler is needed
+[tool.uv.extra-build-variables]
+pyyaml = { PYYAML_FORCE_LIBYAML = "0" }
 
 [[tool.uv.index]]
 name = "pytorch-cu130"

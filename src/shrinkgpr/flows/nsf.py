@@ -58,10 +58,12 @@ class NSFCL(nn.Module):
         self.f2 = _coupling_net(self.d_upper, hidden_dim, self.n_params * self.d_lower)
 
     def get_L(self):
+        """Unit lower triangular factor ``L`` of the linear map ``W = P L U``."""
         eye = torch.eye(self.d, device=self.L_raw.device, dtype=self.L_raw.dtype)
         return torch.tril(self.L_raw, diagonal=-1) + eye
 
     def get_U(self):
+        """Upper triangular factor ``U`` of ``W = P L U``, with a positive diagonal."""
         return torch.triu(self.U_raw, diagonal=1) + torch.diag(torch.exp(self.log_diag_U))
 
     def forward(self, z):

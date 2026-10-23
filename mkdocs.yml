@@ -1,0 +1,82 @@
+site_name: shrinkgpr
+site_description: >-
+  Gaussian and Student-t process regression with hierarchical shrinkage priors,
+  fitted by variational inference with normalizing flows in PyTorch
+copyright: Peter Knaus
+
+theme:
+  name: material
+  features:
+    - content.code.copy
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+# The script that generates the README figures lives next to them
+exclude_docs: |
+  readme_figures.py
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - Model: model.md
+  - Differences from R: differences.md
+  - API reference:
+      - Models: api/models.md
+      - Marginal samples: api/marginal.md
+      - Kernels: api/kernels.md
+      - Flows: api/flows.md
+      - Simulation: api/simulation.md
+      - Saving and loading: api/saving.md
+
+plugins:
+  - search
+  - include-markdown
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: numpy
+            docstring_section_style: table
+            filters: ["!^_"]
+            heading_level: 2
+            inherited_members: true
+            members_order: source
+            merge_init_into_class: true
+            separate_signature: true
+            show_root_heading: true
+            show_signature_annotations: false
+            show_source: false
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - toc:
+      permalink: true
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js

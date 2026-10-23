@@ -11,29 +11,29 @@ class ShrinkTPR(ShrinkGPR):
     """Student-t process regression with hierarchical shrinkage priors.
 
     The Student-t process (Shah et al., 2014) replaces the Gaussian process of
-    :class:`ShrinkGPR`; its degrees of freedom ``nu`` give heavier tails and
+    [`ShrinkGPR`][shrinkgpr.ShrinkGPR]; its degrees of freedom ``nu`` give heavier tails and
     more robustness to outliers. The noise is part of the process, so
     ``y ~ t_N(nu, mean, K + sigma2 I)``, parameterized by its covariance. The
     prior on the degrees of freedom is ``nu - 2 ~ Gamma(nu_alpha, nu_beta)``
-    (shape, rate), so ``nu > 2``. Everything else is as in :class:`ShrinkGPR`.
+    (shape, rate), so ``nu > 2``. Everything else is as in [`ShrinkGPR`][shrinkgpr.ShrinkGPR].
 
     Parameters
     ----------
     y, x, x_mean, a, c, a_mean, c_mean, sigma2_rate
-        As for :class:`ShrinkGPR`.
+        As for [`ShrinkGPR`][shrinkgpr.ShrinkGPR].
     nu_alpha : float
         Shape of the shifted gamma prior on ``nu``.
     nu_beta : float
         Rate of the shifted gamma prior on ``nu``.
     kernel_func, n_layers, flow_func, flow_args, device
-        As for :class:`ShrinkGPR`.
+        As for [`ShrinkGPR`][shrinkgpr.ShrinkGPR].
 
     Attributes
     ----------
     model_, last_model_ : TPRModule
-        Best and last model, as for :class:`ShrinkGPR`.
+        Best and last model, as for [`ShrinkGPR`][shrinkgpr.ShrinkGPR].
     loss_, loss_stor_, optimizer_, stop_reason_
-        As for :class:`ShrinkGPR`.
+        As for [`ShrinkGPR`][shrinkgpr.ShrinkGPR].
     """
 
     _module_class = TPRModule
@@ -88,7 +88,7 @@ class ShrinkTPR(ShrinkGPR):
     def gen_posterior_samples(self, nsamp=1000):
         """Draws from the variational approximation of the posterior.
 
-        As for :meth:`ShrinkGPR.gen_posterior_samples`, plus the degrees of
+        As for [`ShrinkGPR.gen_posterior_samples`][shrinkgpr.ShrinkGPR.gen_posterior_samples], plus the degrees of
         freedom ``nu`` (array of shape (nsamp,)).
         """
         return super().gen_posterior_samples(nsamp)

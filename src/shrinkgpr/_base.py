@@ -411,7 +411,7 @@ class ShrinkBase:
         """Save the model, fitted or not, with its optimizer state, to ``file``.
 
         The file is written with ``torch.save`` and read back with
-        :func:`shrinkgpr.load`; training can then continue with :meth:`fit`.
+        [`load`][shrinkgpr.load]; training can then continue with `fit`.
         """
         from . import __version__
 

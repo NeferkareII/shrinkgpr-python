@@ -23,9 +23,20 @@ uv run pytest -m "not r"                        # skip the comparisons against R
 uv run python -m compare.numerics               # function-by-function comparison with R
 uv run python -m compare.benchmark              # training speed, Python vs R
 uv run python docs/readme_figures.py            # rerun the README examples, regenerate docs/figures
+uv run --group docs mkdocs serve                # documentation site at http://127.0.0.1:8000
+uv run --group docs mkdocs build --strict       # build it into site/, failing on any warning
 ```
 
 - **README.** `README.md` mirrors the R package's README. Its code blocks are copies of `docs/readme_figures.py`; when changing one, change the other and regenerate the figures.
+- **Documentation site.** MkDocs with the Material theme (`mkdocs.yml`, pages in `docs/`).
+  - The API reference is generated from the docstrings by mkdocstrings.
+  - "Getting started" includes the README between its `docs-include-start`/`docs-include-end` markers.
+  - `.github/workflows/docs.yml` builds it on every push and pull request, and publishes it to GitHub Pages from `main`. CI uses Python 3.13 with only the docs group, without torch.
+  - PyYAML has no Python 3.15 wheels, so `[tool.uv.extra-build-variables]` builds it without its C extension.
+- **Docstrings** are numpydoc-style and rendered as Markdown.
+  - Cross-reference with mkdocstrings syntax, e.g. ``[`fit`][shrinkgpr.ShrinkGPR.fit]``, not Sphinx roles such as `:meth:`.
+  - Math goes in `$...$` / `$$...$$` inside raw (`r"""`) docstrings.
+  - Prose after a Parameters list belongs in a Notes section; otherwise the strict build fails.
 
 - **Comparison with R.** `compare/` checks the port against the reference R package. It is installed into the separate library `~/.venvs/shrinkgpr_rlib`; see `compare/README.md`.
   - Every newly ported function should get a case in `compare/numerics.py` and a handler in `compare/r/numerics.R`.

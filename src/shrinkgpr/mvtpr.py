@@ -12,17 +12,26 @@ class ShrinkMVTPR(ShrinkMVGPR):
 
     The N x M response matrix is matrix-variate t,
     ``Y ~ MT(nu, 0, K + sigma2 I, Omega)``, which has heavier tails than the
-    matrix normal of :class:`ShrinkMVGPR` and so is more robust to outliers.
-    The priors are those of :class:`ShrinkMVGPR` plus
+    matrix normal of [`ShrinkMVGPR`][shrinkgpr.ShrinkMVGPR] and so is more robust to outliers.
+    The priors are those of [`ShrinkMVGPR`][shrinkgpr.ShrinkMVGPR] plus
     ``nu - 2 ~ Gamma(nu_alpha, nu_beta)`` (shape, rate) on the degrees of
     freedom.
 
     Parameters
     ----------
+    y, x, a, c, eta, a_Om, c_Om, sigma2_rate
+        As for [`ShrinkMVGPR`][shrinkgpr.ShrinkMVGPR].
     nu_alpha, nu_beta : float
         Shape and rate of the gamma prior on ``nu - 2``.
+    kernel_func, n_layers, flow_func, flow_args, device
+        As for [`ShrinkMVGPR`][shrinkgpr.ShrinkMVGPR].
 
-    All other parameters and the attributes are as for :class:`ShrinkMVGPR`.
+    Attributes
+    ----------
+    model_, last_model_ : MVTPRModule
+        Best and last model, as for [`ShrinkMVGPR`][shrinkgpr.ShrinkMVGPR].
+    loss_, loss_stor_, optimizer_, stop_reason_
+        As for [`ShrinkMVGPR`][shrinkgpr.ShrinkMVGPR].
     """
 
     _module_class = MVTPRModule
@@ -66,7 +75,7 @@ class ShrinkMVTPR(ShrinkMVGPR):
     def gen_posterior_samples(self, nsamp=1000):
         """Draws from the variational approximation of the posterior.
 
-        As for :meth:`ShrinkMVGPR.gen_posterior_samples`, plus the degrees of
+        As for [`ShrinkMVGPR.gen_posterior_samples`][shrinkgpr.ShrinkMVGPR.gen_posterior_samples], plus the degrees of
         freedom ``nu`` (array of shape (nsamp,)).
         """
         return super().gen_posterior_samples(nsamp)

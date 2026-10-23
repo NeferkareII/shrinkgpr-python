@@ -13,6 +13,8 @@ shrinkage priors on the kernel parameters, check convergence, draw posterior
 samples and make predictions. They are not exhaustive; every class and method
 has a docstring with the full set of options.
 
+<!-- docs-include-start: docs/getting-started.md includes everything up to docs-include-end -->
+
 ## Prerequisites
 
 `shrinkgpr` needs Python 3.10 or newer. Install a PyTorch build that matches
@@ -268,6 +270,8 @@ model = shrinkgpr.load("model.pt")
 ```
 
 Only load files you trust: the file is unpickled, which can run arbitrary code.
+
+<!-- docs-include-end -->
 
 ## Differences from the R package
 

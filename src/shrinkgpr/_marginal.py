@@ -45,8 +45,8 @@ class MarginalSamples:
         """Plot the marginal predictions.
 
         One covariate: median and credible bands over the grid
-        (:meth:`plot_1d`). Two covariates: surface of the median
-        (:meth:`plot_2d`). Keyword arguments are passed on.
+        ([`plot_1d`][shrinkgpr.MarginalSamples.plot_1d]). Two covariates: surface of the median
+        ([`plot_2d`][shrinkgpr.MarginalSamples.plot_2d]). Keyword arguments are passed on.
         """
         return self.plot_1d(**kwargs) if len(self.to_eval) == 1 else self.plot_2d(**kwargs)
 
