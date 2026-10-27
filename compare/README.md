@@ -8,9 +8,11 @@ The comparison needs R with the packages `torch` (with its backend installed), `
 
 ```r
 remotes::install_github("NeferkareII/shrinkGPR@20a822d",
-                        lib = "C:/Users/knaus/.venvs/shrinkgpr_rlib",
+                        lib = "<home>/.venvs/shrinkgpr_rlib",
                         dependencies = FALSE, upgrade = "never", force = TRUE)
 ```
+
+Replace `<home>` with your home directory, e.g. `C:/Users/<you>` on Windows. Don't use `~` there: R on Windows expands it to the Documents folder.
 
 The scripts put that library first on R's library path:
 - **Library:** `$SHRINKGPR_R_LIB` if set, otherwise `~/.venvs/shrinkgpr_rlib` if it exists.

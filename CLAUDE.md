@@ -46,7 +46,9 @@ uv run --group docs mkdocs build --strict       # build it into site/, failing o
 - **Exit codes after `.backward()` can't be trusted.** With torch 2.14.1+cu130 on Python 3.15, any process that calls `.backward()` crashes at interpreter shutdown (exit 139 / 0xC0000005), even after a successful run.
   - Read pytest's summary line rather than the exit code.
   - Run scripts with `PYTHONUNBUFFERED=1` or `python -u`, so buffered output isn't lost.
-- **The venv lives outside OneDrive.** It is at `C:\Users\knaus\.venvs\shrinkgpr`, set through the user environment variable `UV_PROJECT_ENVIRONMENT`. Don't create a `.venv` inside the repository.
+- **The venv lives outside the synced repository folder.** It is at `~/.venvs/shrinkgpr` (the home directory, not R's `~`), set through the user environment variable `UV_PROJECT_ENVIRONMENT`. Don't create a `.venv` inside the repository.
+  - `uv pip` ignores `UV_PROJECT_ENVIRONMENT`; pass `--python ~/.venvs/shrinkgpr` to it.
+  - `uv sync` removes packages that aren't in the lockfile, such as a Jupyter setup installed by hand; use `uv sync --inexact` to keep them.
 - **torch comes from the PyTorch CUDA 13.0 index** (`pytorch-cu130` in `pyproject.toml`). That index has Python 3.15 wheels and supports the RTX 5080 (Blackwell). Everything else comes from PyPI.
 
 ## Scope
