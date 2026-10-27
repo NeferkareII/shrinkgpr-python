@@ -33,6 +33,7 @@ uv run --group docs mkdocs build --strict       # build it into site/, failing o
   - "Getting started" includes the README between its `docs-include-start`/`docs-include-end` markers.
   - `.github/workflows/docs.yml` builds it on every push and pull request, and publishes it to GitHub Pages from `main`. CI uses Python 3.13 with only the docs group, without torch.
   - PyYAML has no Python 3.15 wheels, so `[tool.uv.extra-build-variables]` builds it without its C extension.
+- **CI tests.** `.github/workflows/tests.yml` runs `pytest -m "not r and not slow"` on CPU torch (installed from PyTorch's CPU index, not the lockfile) for Python 3.10 and 3.14, the range PyPI has torch wheels for. Pass or fail comes from the JUnit report (`.github/check_junit.py`), not pytest's exit code.
 - **Docstrings** are numpydoc-style and rendered as Markdown.
   - Cross-reference with mkdocstrings syntax, e.g. ``[`fit`][shrinkgpr.ShrinkGPR.fit]``, not Sphinx roles such as `:meth:`.
   - Math goes in `$...$` / `$$...$$` inside raw (`r"""`) docstrings.

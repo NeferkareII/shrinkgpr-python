@@ -1,0 +1,42 @@
+# Run the test suite on CPU torch for the oldest and newest supported Python.
+# The comparisons against R (marker "r") and the slow checks are left out.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python }}
+      # The lockfile takes torch from the CUDA index; the runners have no GPU,
+      # so CPU torch is installed first and the package on top of it
+      - name: Install
+        run: |
+          uv venv
+          uv pip install torch --index-url https://download.pytorch.org/whl/cpu
+          uv pip install -e . --group dev
+      # torch may crash at interpreter exit after .backward(), so the exit code
+      # can't be trusted; the JUnit report decides instead
+      - name: Test
+        run: |
+          .venv/bin/python -m pytest -m "not r and not slow" --junitxml=report.xml || true
+          .venv/bin/python .github/check_junit.py report.xml
