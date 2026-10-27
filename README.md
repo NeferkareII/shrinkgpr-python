@@ -1,5 +1,9 @@
 # shrinkgpr: Normalizing Flows for Hierarchical Shrinkage in Gaussian Process Regression Models
 
+[![tests](https://github.com/NeferkareII/shrinkgpr-python/actions/workflows/tests.yml/badge.svg)](https://github.com/NeferkareII/shrinkgpr-python/actions/workflows/tests.yml)
+[![docs](https://github.com/NeferkareII/shrinkgpr-python/actions/workflows/docs.yml/badge.svg)](https://neferkareii.github.io/shrinkgpr-python/)
+[![License: GPL-2.0-or-later](https://img.shields.io/badge/license-GPL--2.0--or--later-blue.svg)](https://github.com/NeferkareII/shrinkgpr-python/blob/main/LICENSE)
+
 This repository contains the Python port of the R package
 [shrinkGPR](https://github.com/NeferkareII/shrinkGPR) for Gaussian process
 regression with hierarchical shrinkage priors. `shrinkgpr` uses PyTorch to
