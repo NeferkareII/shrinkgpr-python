@@ -99,16 +99,12 @@ mixed over local scales $\lambda_j$ with an F distribution:
 
 $$
 \theta_j \mid \tau, \lambda_j \sim \mathcal{G}\left(\frac{1}{2},\, \frac{1}{2 \tau \lambda_j}\right), \qquad
-\lambda_j \sim F(2a, 2c), \qquad j = 1, \ldots, d,
+\lambda_j \sim F(2a, 2c), \qquad
+\tau \sim F(2c, 2a).
 $$
 
-$$
-\tau \sim F(2c, 2a), \qquad
-\sigma^2 \sim \mathrm{Exp}(\sigma^2_\mathrm{rate}).
-$$
-
-Gamma distributions $\mathcal{G}(\cdot, \cdot)$ are given by shape and rate,
-and the exponential by its rate. $a$ controls the spike at zero and $c$ the
+Gamma distributions $\mathcal{G}(\cdot, \cdot)$ are given by shape and rate.
+$a$ controls the spike at zero and $c$ the
 tail decay. The local scales are integrated out analytically, so the model
 works with the marginal density
 
@@ -132,6 +128,12 @@ with marginal density
 $p(\beta_k \mid \tau_\mu) \propto \tau_\mu^{-1/2}\,
 U\!\left(c_\mu + \tfrac{1}{2},\, \tfrac{3}{2} - a_\mu,\, \frac{a_\mu \beta_k^2}{2 c_\mu \tau_\mu}\right)$.
 
+The noise variance has an exponential prior with rate $\sigma^2_\mathrm{rate}$,
+
+$$
+\sigma^2 \sim \mathrm{Exp}(\sigma^2_\mathrm{rate}).
+$$
+
 The Student-t models add a prior on the degrees of freedom,
 
 $$
@@ -143,10 +145,12 @@ where the shift by 2 keeps $\nu > 2$, so the process variance is finite.
 The multivariate models add priors on $\Omega = S D S$:
 
 $$
+\begin{gathered}
 D \sim \mathrm{LKJ}(\eta), \qquad
-s_m \mid \tau_\Omega, \lambda_{\Omega,m} \sim \mathcal{G}\left(\frac{1}{2},\, \frac{1}{2 \tau_\Omega \lambda_{\Omega,m}}\right), \qquad
+s_m \mid \tau_\Omega, \lambda_{\Omega,m} \sim \mathcal{G}\left(\frac{1}{2},\, \frac{1}{2 \tau_\Omega \lambda_{\Omega,m}}\right), \\
 \lambda_{\Omega,m} \sim F(2a_\Omega, 2c_\Omega), \qquad
 \tau_\Omega \sim F(2c_\Omega, 2a_\Omega),
+\end{gathered}
 $$
 
 for $m = 1, \ldots, M$. Since the product of the scales is fixed to 1, only
