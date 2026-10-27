@@ -5,6 +5,7 @@ description = "Scalable Gaussian process regression with hierarchical shrinkage 
 readme = "README.md"
 requires-python = ">=3.10"
 license = "GPL-2.0-or-later"
+license-files = ["LICENSE"]
 authors = [{ name = "Peter Knaus", email = "peter.knaus@wu.ac.at" }]
 dependencies = [
     "torch>=2.9",
