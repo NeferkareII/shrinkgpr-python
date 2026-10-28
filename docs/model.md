@@ -67,11 +67,9 @@ $s_m$ is fixed to 1. Two safeguards keep training stable, so the
 parameterization holds only approximately at its edges: each free $\log s_m$
 is bounded smoothly to $(-4, 4)$, and the diagonal of the Cholesky factor
 $S L_D$ of $\Omega$ (with $D = L_D L_D^\top$) is kept above $0.03$ by a
-softplus, which changes it noticeably only below about $0.3$. The ELBO
-includes the log-Jacobian of that softplus,
-$\sum_m \log \mathrm{sigmoid}\left(10\, (\ell_{mm} - 0.03)\right)$ for the
-diagonal entries $\ell_{mm}$ of $S L_D$, which acts as a soft penalty on small
-diagonal entries.
+softplus in the likelihood, which changes it noticeably only below about
+$0.3$. The priors are on $S$ and $D$, so this softplus adds no Jacobian term
+to the ELBO.
 
 [`ShrinkMVTPR`][shrinkgpr.ShrinkMVTPR] is the matrix Student-t counterpart,
 
@@ -82,8 +80,10 @@ $$
 in the convention of Shah et al. (2014): $Y \mid V \sim
 \mathcal{MN}_{N,M}(0, K + \sigma^2 I_N, V)$ with
 $V \sim \mathcal{IW}(\Omega, \nu + M - 1)$, so each row of $Y$ is multivariate t
-with $\nu$ degrees of freedom. Here $\Omega$ is a scale matrix rather than the
-covariance:
+with $\nu$ degrees of freedom; this is the multivariate Student-t process of
+Chen et al. (2020). Unlike the matrix normal, the matrix-variate t is not a
+multivariate t on $\mathrm{vec}(Y)$. Here $\Omega$ is a scale matrix rather
+than the covariance:
 
 $$
 \mathrm{Cov}(\mathrm{vec}(Y)) = \frac{1}{\nu - 2}\, \Omega \otimes (K + \sigma^2 I_N).
@@ -276,6 +276,9 @@ absolute determinant of the Jacobian, of shape `(n_latent,)`. See
 - Cadonna, A., Frühwirth-Schnatter, S., & Knaus, P. (2020). Triple the gamma —
   A unifying shrinkage prior for variance and variable selection in sparse
   state space and TVP models. *Econometrics*, 8(2), 20.
+- Chen, Z., Wang, B., & Gorban, A. N. (2020). Multivariate Gaussian and
+  Student-t process regression for multi-output prediction. *Neural Computing
+  and Applications*, 32, 3005–3028.
 - Durkan, C., Bekasov, A., Murray, I., & Papamakarios, G. (2019). Neural spline
   flows. *Advances in Neural Information Processing Systems*, 32.
 - Kingma, D. P., Salimans, T., Jozefowicz, R., Chen, X., Sutskever, I., &

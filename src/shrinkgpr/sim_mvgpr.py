@@ -77,7 +77,10 @@ def sim_mvgpr(N=200, M=2, d=3, sigma2=0.1, tau=2, kernel_func=kernel_se, perc_sp
         not given.
     Omega : array-like of shape (M, M), optional
         Symmetric positive definite between-response covariance; ``S D S``
-        with ``D ~ LKJ(1)`` and ``diag(S) ~ Gamma(1, 1)`` if not given.
+        with ``D ~ LKJ(1)`` and ``diag(S) ~ Gamma(1, 1)`` if not given. In
+        both cases it is rescaled so that the product of its marginal standard
+        deviations is 1, the identification used by
+        [`ShrinkMVGPR`][shrinkgpr.ShrinkMVGPR].
     device : str or torch.device, optional
         Defaults to CUDA when available.
 
@@ -86,7 +89,10 @@ def sim_mvgpr(N=200, M=2, d=3, sigma2=0.1, tau=2, kernel_func=kernel_se, perc_sp
     dict
         ``data``: a DataFrame with columns ``y.1..y.M`` and ``x.1..x.d``
         (``x`` for ``d = 1``, as in R);
-        ``true_vals``: a dict with ``theta``, ``Omega``, ``sigma2`` and ``tau``.
+        ``true_vals``: a dict with ``theta``, ``Omega`` (rescaled, so directly
+        comparable to the ``Omega`` draws of
+        [`gen_posterior_samples`][shrinkgpr.ShrinkMVGPR.gen_posterior_samples]),
+        ``sigma2`` and ``tau``.
     """
     for name, v in {"N": N, "M": M, "d": d}.items():
         if isinstance(v, bool) or not isinstance(v, numbers.Integral) or v < 1:
@@ -126,6 +132,10 @@ def sim_mvgpr(N=200, M=2, d=3, sigma2=0.1, tau=2, kernel_func=kernel_se, perc_sp
         if not np.allclose(Omega, Omega.T) or np.any(np.linalg.eigvalsh(Omega) <= 0):
             raise ValueError("The argument 'Omega', if provided, must be a symmetric positive "
                              "definite matrix.")
+
+    # Rescale so that the product of the marginal standard deviations is 1,
+    # matching the identification of ShrinkMVGPR (Omega = S D S, prod(diag(S)) = 1)
+    Omega = Omega / np.exp(np.mean(np.log(np.diag(Omega))))
 
     theta_t = torch.tensor(theta, dtype=torch.float32, device=device).unsqueeze(0)
     tau_t = torch.tensor([float(tau)], dtype=torch.float32, device=device)

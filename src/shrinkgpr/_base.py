@@ -178,7 +178,8 @@ class ShrinkBase:
         n_epochs : int
             Maximum number of epochs.
         n_latent : int
-            Number of samples from the variational distribution per epoch.
+            Number of Monte Carlo samples drawn from the variational
+            distribution per epoch to estimate the ELBO.
         auto_stop : bool
             Every 100 epochs, stop if a regression of the last 100 losses on
             the epoch number has a slope p-value above 0.2.

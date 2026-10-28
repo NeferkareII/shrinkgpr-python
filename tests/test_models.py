@@ -171,6 +171,23 @@ def test_prediction_shapes(fitted_model, data):
     assert lpds == pytest.approx(float(log_dens[0]))
 
 
+@pytest.mark.parametrize("cls", [ShrinkGPR, ShrinkTPR], ids=lambda c: c.__name__)
+def test_predict_at_a_single_point_matches_the_moments(data, cls):
+    """At one point, the draws have the mean and variance of the predictive mixture,
+    E[Var] + Var[E] (R broadcast its TPR draws to nsamp x nsamp before e0f6137)."""
+    model = fitted(cls, data)
+    x_one = split(cls, data)[3][:1]
+    nsamp = 20000
+    torch.manual_seed(3)
+    draws = model.predict(x_one, nsamp=nsamp)
+    assert draws.shape == (nsamp, 1)
+    moments = model.calc_pred_moments(x_one, nsamp=nsamp)
+    mix_mean = moments["means"].mean()
+    mix_var = moments["vars"].mean() + moments["means"].var()
+    assert abs(draws.mean() - mix_mean) < 0.05 * np.sqrt(mix_var)
+    assert draws.var() == pytest.approx(mix_var, rel=0.1)
+
+
 def test_single_row_methods_reject_several_rows(fitted_model, data):
     _, _, y_test, x_test = split(type(fitted_model), data)
     with pytest.raises(ValueError, match="one row"):

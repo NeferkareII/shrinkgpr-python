@@ -92,9 +92,8 @@ mv_elbo_parts <- function(m, zk_pos, model) {
     m$lexp(sigma_zk, m$prior_rate)$mean()
   if (model == "MVTPR") prior <- prior + m$ldg(nu_raw, m$nu_alpha, m$nu_beta)$mean()
 
-  diag_logJ <- torch_sum(torch_log(torch_sigmoid(10.0 * (diag - eps_diag))), dim = 2)
   list(likelihood = likelihood, prior = prior, logJ_D = D_chol_zk$logJ$mean(),
-       log_det_S = log_det_S$mean(), diag_logJ = diag_logJ$mean())
+       log_det_S = log_det_S$mean())
 }
 
 # R formula interface for an N x M response and N x p covariates

@@ -115,13 +115,13 @@ def lkj_chol_logpdf(L, eta):
 def bias_diag(L):
     """Replace the diagonal of ``L`` by ``EPS_DIAG + softplus(diag - EPS_DIAG)``.
 
-    Keeps the diagonal of the Cholesky factor of Omega away from zero.
-    Returns the new factor and the original diagonal.
+    Keeps the diagonal of the Cholesky factor of Omega away from zero in the
+    likelihood.
     """
     diag = torch.diagonal(L, dim1=-2, dim2=-1)
     diag2 = EPS_DIAG + F.softplus(diag - EPS_DIAG, beta=DIAG_BETA)
     eye = torch.eye(L.shape[-1], dtype=torch.bool, device=L.device)
-    return torch.where(eye, torch.diag_embed(diag2), L), diag
+    return torch.where(eye, torch.diag_embed(diag2), L)
 
 
 class MVGPRModule(nn.Module):
@@ -210,8 +210,8 @@ class MVGPRModule(nn.Module):
 
         Returns a dict with ``L_D`` and ``logJ_D`` (correlation factor and its
         log-Jacobian), ``S_diag`` (scales), ``log_det_S`` (log-Jacobian of the
-        bounded scales), ``diag`` (diagonal of ``S L_D``) and ``L_Om`` (``S L_D``
-        with its diagonal biased away from zero).
+        bounded scales) and ``L_Om`` (``S L_D`` with its diagonal biased away
+        from zero).
         """
         L_D, logJ_D = make_corr_chol(params["D_uncons"], self.M)
 
@@ -224,9 +224,9 @@ class MVGPRModule(nn.Module):
         log_det_squash = torch.log(torch.clamp(1 / torch.cosh(s / S_BOUND).pow(2),
                                                min=1e-12)).sum(dim=1)
 
-        L_Om, diag = bias_diag(torch.diag_embed(S_diag) @ L_D)
+        L_Om = bias_diag(torch.diag_embed(S_diag) @ L_D)
         return {"L_D": L_D, "logJ_D": logJ_D, "S_diag": S_diag,
-                "log_det_S": log_det_exp + log_det_squash, "diag": diag, "L_Om": L_Om}
+                "log_det_S": log_det_exp + log_det_squash, "L_Om": L_Om}
 
     # ELBO
 
@@ -259,10 +259,9 @@ class MVGPRModule(nn.Module):
             raise RuntimeError("Likelihood is NaN")
 
         prior = self.log_prior(params, omega)
-        diag_biasing_logJ = torch.log(torch.sigmoid(DIAG_BETA * (omega["diag"] - EPS_DIAG))
-                                      ).sum(dim=1)
-        var_dens = (log_det_J.mean() + omega["logJ_D"].mean() + omega["log_det_S"].mean()
-                    + diag_biasing_logJ.mean())
+        # No Jacobian for the diagonal biasing of L_Om: it only enters the
+        # likelihood, while the priors are on S and D
+        var_dens = log_det_J.mean() + omega["logJ_D"].mean() + omega["log_det_S"].mean()
 
         elbo = likelihood + prior + var_dens
         if torch.isnan(elbo):

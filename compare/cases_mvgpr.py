@@ -25,11 +25,9 @@ def elbo_parts(module, zk):
     params = module.unpack(zk)
     K = module.kernel_func(params["thetas"], params["tau"], module.x)
     omega = module.omega_factor(params)
-    diag_logJ = torch.log(torch.sigmoid(10.0 * (omega["diag"] - 0.03))).sum(dim=1)
     return {"likelihood": module.log_likelihood(K, omega["L_Om"], params).mean(),
             "prior": module.log_prior(params, omega),
-            "logJ_D": omega["logJ_D"].mean(), "log_det_S": omega["log_det_S"].mean(),
-            "diag_logJ": diag_logJ.mean()}
+            "logJ_D": omega["logJ_D"].mean(), "log_det_S": omega["log_det_S"].mean()}
 
 
 def build_model_cases(dtype, model, module_cls, user_cls, extra=None, seed=0,

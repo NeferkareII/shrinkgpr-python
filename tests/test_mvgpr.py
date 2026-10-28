@@ -134,8 +134,8 @@ def test_make_corr_chol_log_jacobian(M):
 
 def test_bias_diag():
     L = torch.tensor([[[0.5, 0.0], [0.3, -0.2]]], dtype=torch.float64)
-    L2, diag = bias_diag(L)
-    torch.testing.assert_close(diag, torch.tensor([[0.5, -0.2]], dtype=torch.float64))
+    L2 = bias_diag(L)
+    diag = torch.tensor([[0.5, -0.2]], dtype=torch.float64)
     expected = 0.03 + torch.nn.functional.softplus(diag - 0.03, beta=10)
     torch.testing.assert_close(torch.diagonal(L2, dim1=1, dim2=2), expected)
     assert L2[0, 1, 0] == 0.3 and L2[0, 0, 1] == 0
@@ -160,6 +160,19 @@ def test_lkj_chol_logpdf_is_lkj_on_D(M, eta):
         log_det_D = 2 * torch.log(torch.diagonal(L[b])).sum()
         expected = (eta - 1) * log_det_D + torch.linalg.slogdet(jac).logabsdet
         torch.testing.assert_close(lkj_chol_logpdf(L[b:b + 1], eta)[0], expected)
+
+
+def test_elbo_has_no_jacobian_for_the_diagonal_biasing():
+    """The ELBO is likelihood + prior + the flow, correlation and scale Jacobians only
+    (R added a log-sigmoid term for the biased diagonal of chol(Omega) before e0f6137)."""
+    m = module64()
+    zk, log_det_J = m(m.gen_batch(5))
+    params = m.unpack(zk)
+    omega = m.omega_factor(params)
+    K = m.kernel_func(params["thetas"], params["tau"], m.x)
+    expected = (m.log_likelihood(K, omega["L_Om"], params).mean() + m.log_prior(params, omega)
+                + log_det_J.mean() + omega["logJ_D"].mean() + omega["log_det_S"].mean())
+    torch.testing.assert_close(m.elbo(zk, log_det_J), expected)
 
 
 def test_ldnorm_multi_matches_matrix_normal():
@@ -429,10 +442,16 @@ def test_sim_mvgpr():
     tv = sim["true_vals"]
     assert (tv["theta"] == 0).sum() == 2 and tv["Omega"].shape == (3, 3)
     assert np.linalg.eigvalsh(tv["Omega"]).min() > 0
+    # Omega has the identification of ShrinkMVGPR: its marginal sds multiply to 1
+    assert np.prod(np.sqrt(np.diag(tv["Omega"]))) == pytest.approx(1)
     torch.manual_seed(123)
     pd.testing.assert_frame_equal(sim_mvgpr(N=30, M=3, d=4, device="cpu")["data"], sim["data"])
     fixed = sim_mvgpr(N=10, theta=[1.0, 0.0, 0.5], Omega=np.eye(2), rho=0.5, device="cpu")
     np.testing.assert_array_equal(fixed["true_vals"]["theta"], [1.0, 0.0, 0.5])
+    # A given Omega is rescaled too, keeping its correlations
+    Omega_in = np.array([[4.0, 1.0], [1.0, 9.0]])
+    tv = sim_mvgpr(N=10, Omega=Omega_in, device="cpu")["true_vals"]
+    np.testing.assert_allclose(tv["Omega"], Omega_in / 6)
     with pytest.raises(ValueError, match="positive definite"):
         sim_mvgpr(Omega=np.array([[1.0, 2.0], [2.0, 1.0]]))
     with pytest.raises(ValueError, match="at least 2"):
